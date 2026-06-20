@@ -1,0 +1,10 @@
+{
+  "name": "Sugar Daddy Marketplace",
+  "description": "A premium peer-to-peer services platform where clients discover, book, review, and purchase professional, concierge, mentorship, and companionship services from verified providers.",
+  "requestFramePermissions": [
+    "geolocation"
+  ],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

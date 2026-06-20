@@ -1,0 +1,96 @@
+@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400..900;1,400..900&family=Manrope:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --color-primary: #ffdebf; /* Cream Orange accent */
+  --color-primary-dark: #b86214;
+  --color-on-primary: #492900;
+  --color-primary-container: #fdba74;
+  
+  --color-secondary: #ccc5bf;
+  --color-on-secondary: #33302c;
+  
+  --color-background: #151311; /* Deep Basalt base */
+  --color-on-background: #e7e1de;
+  
+  --color-surface: #211f1d; /* Moody Greige Level 1 container */
+  --color-surface-dim: #151311;
+  --color-surface-bright: #3b3936;
+  --color-surface-container-lowest: #100e0c;
+  --color-surface-container-low: #1d1b19;
+  --color-surface-container: #211f1d;
+  --color-surface-container-high: #2c2a27;
+  --color-surface-container-highest: #373432;
+  
+  --color-on-surface: #e7e1de;
+  --color-on-surface-variant: #d6c3b4;
+  --color-outline: #9e8e80;
+  --color-outline-variant: #514439;
+
+  --font-serif: "Playfair Display", Georgia, serif;
+  --font-sans: "Manrope", "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+}
+
+@layer utilities {
+  .glow-primary-sm {
+    box-shadow: 0 0 12px rgba(253, 186, 116, 0.15);
+  }
+  .glow-primary-md {
+    box-shadow: 0 0 24px rgba(253, 186, 116, 0.25);
+  }
+  .glow-ember {
+    box-shadow: 0 0 18px rgba(255, 222, 191, 0.2);
+  }
+}
+
+body {
+  background-color: #151311;
+  color: #e7e1de;
+  font-family: var(--font-sans);
+}
+
+/* Custom subtle grain overlay simulation */
+.freckled-bg {
+  background-color: #151311;
+  background-image: 
+    radial-gradient(rgba(253, 186, 116, 0.03) 1px, transparent 0),
+    radial-gradient(rgba(253, 186, 116, 0.02) 1px, transparent 0);
+  background-size: 24px 24px;
+  background-position: 0 0, 12px 12px;
+}
+
+/* High Contrast: Solid, deeply opaque styling for all main page boxes */
+.bg-surface,
+[class*="bg-surface"],
+.bg-surface\/95,
+.bg-surface\/90,
+.bg-[#1c1b1b],
+.bg-[#100e0c],
+.bg-[#211f1d],
+.bg-[#1e1b19],
+.bg-[#1d1b19] {
+  background-color: #1e1b19 !important; /* Solid luxury basalt greige */
+  opacity: 1 !important;
+}
+
+/* Make internal panels look perfectly nested but fully opaque */
+div[class*="bg-[#100e0c]/60"],
+div[class*="bg-[#100e0c]/85"],
+div[class*="bg-[#131313]/60"],
+div[class*="bg-[#131313]/52"],
+div[class*="bg-[#131313]/65"],
+div[class*="bg-primary/5"] {
+  background-color: #131110 !important;
+  opacity: 1 !important;
+}
+
+/* Modal layers and detail overlays have thick opaque shielding */
+div[class*="bg-black/85"],
+div[class*="bg-black/60"],
+.bg-black\/85,
+.bg-black\/60 {
+  background-color: rgba(10, 8, 7, 0.94) !important;
+}
+
+
