@@ -52,7 +52,8 @@ export const BookingCalendar: React.FC<BookingCalendarProps> = ({
   // Calculations
   const bookingSubtotal = provider.pricePerEvent;
   const platformFee = Math.round(bookingSubtotal * 0.10); // 10% commission controls
-  const totalDue = bookingSubtotal + platformFee - discount;
+  const adminBookingFee = 4.95;
+  const totalDue = Math.round((bookingSubtotal + platformFee + adminBookingFee - discount) * 100) / 100;
 
   const handleApplyPromo = () => {
     if (promoCode.trim().toUpperCase() === 'LUXELIFE') {
@@ -83,7 +84,7 @@ export const BookingCalendar: React.FC<BookingCalendarProps> = ({
 
   const handlePaymentSubmit = () => {
     if (currentUser.walletBalance < totalDue) {
-      alert(`Insufficient funds. Your wallet has $${currentUser.walletBalance}. Use development simulated top-up button.`);
+      alert(`Insufficient Escrow Funds: Your wallet balance is $${currentUser.walletBalance}.00 USD, while this booking requires $${totalDue}.00 USD. Please top up your wallet via the Stripe checkout tab on your dashboard.`);
       return;
     }
 
@@ -325,6 +326,14 @@ export const BookingCalendar: React.FC<BookingCalendarProps> = ({
                 <span className="text-[9px] bg-primary/15 border border-primary/30 text-primary px-1.5 py-0.2 rounded font-mono font-bold">MUTUAL PROTECTION</span>
               </div>
               <span className="font-mono text-neutral-200 font-semibold">+${platformFee}</span>
+            </div>
+
+            <div className="flex items-center justify-between text-xs text-neutral-400 font-sans">
+              <div className="flex items-center gap-1">
+                <span className="font-mono">Admin Booking Fee</span>
+                <span className="text-[9px] bg-amber-500/10 border border-amber-500/20 text-[#ffdebf] px-1.5 py-0.2 rounded font-mono font-bold">PAID TO ADMIN</span>
+              </div>
+              <span className="font-mono text-neutral-200 font-semibold">+$4.95</span>
             </div>
 
             {discount > 0 && (

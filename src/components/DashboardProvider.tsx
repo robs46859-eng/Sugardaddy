@@ -17,6 +17,7 @@ interface DashboardProviderProps {
   onUpdateProviderListing: (updatedListing: Partial<ServiceProvider>) => void;
   onUpdateBooking: (updated: Booking) => void;
   triggerNotification: (text: string) => void;
+  onProviderSubscribe?: () => void;
 }
 
 export const DashboardProvider: React.FC<DashboardProviderProps> = ({
@@ -33,8 +34,9 @@ export const DashboardProvider: React.FC<DashboardProviderProps> = ({
   onUpdateProviderListing,
   onUpdateBooking,
   triggerNotification,
+  onProviderSubscribe,
 }) => {
-  const [activeSubTab, setActiveSubTab] = useState<'bookings' | 'listing' | 'avail' | 'analytics' | 'profile' | 'boost' | 'referrals'>('bookings');
+  const [activeSubTab, setActiveSubTab] = useState<'bookings' | 'listing' | 'avail' | 'analytics' | 'profile' | 'boost' | 'referrals' | 'billing'>('bookings');
 
   // New Listing creation state
   const [newTitle, setNewTitle] = useState('');
@@ -182,10 +184,50 @@ export const DashboardProvider: React.FC<DashboardProviderProps> = ({
         >
           🎁 Referrals &amp; Rewards
         </button>
+
+        <button
+          onClick={() => setActiveSubTab('billing')}
+          className={`px-4 py-2.5 text-xs font-bold font-mono tracking-wider uppercase transition-all whitespace-nowrap border-b-2 ${
+            activeSubTab === 'billing'
+              ? 'border-primary text-[#ffdebf] bg-[#ffdebf]/5'
+              : 'border-transparent text-amber-300 hover:text-white_variant'
+          }`}
+        >
+          💳 Stripe &amp; Subscription
+        </button>
       </div>
 
       {/* Workspace Area */}
-      {activeSubTab === 'bookings' && (
+      {!currentUser.providerSubscriptionActive &&
+       activeSubTab !== 'billing' &&
+       activeSubTab !== 'profile' &&
+       activeSubTab !== 'referrals' ? (
+        <div className="max-w-xl mx-auto p-8 rounded-2xl bg-[#1c1b1b] border border-amber-500/20 text-center space-y-5 shadow-2xl relative overflow-hidden my-6">
+          <div className="absolute top-0 right-0 w-32 h-32 bg-amber-500/5 rounded-full blur-2xl pointer-events-none" />
+          <div className="w-16 h-16 bg-amber-500/10 border border-[#a28a75]/30 rounded-full flex items-center justify-center mx-auto text-amber-300 animate-pulse text-lg">
+            🔑
+          </div>
+          <div className="space-y-2">
+            <h3 className="text-lg font-bold font-serif uppercase tracking-tight text-white">☆ Provider Premium Required ☆</h3>
+            <p className="text-[11px] text-neutral-400 font-mono uppercase tracking-wider">
+              Verification &amp; Active $25.00/month Subscription is Dormant
+            </p>
+          </div>
+          <p className="text-xs text-neutral-300 leading-relaxed max-w-sm mx-auto font-sans text-center">
+            Secure client bookings, publication features, lead analytics, and real-time audio/secure messaging are reserved as premium capabilities on our verified provider network.
+          </p>
+          <div className="pt-2 text-center">
+            <button
+              onClick={() => setActiveSubTab('billing')}
+              className="px-6 py-2.5 bg-gradient-to-r from-amber-400 to-primary text-neutral-900 font-bold font-mono text-[11px] uppercase tracking-wider rounded-lg hover:scale-105 transition-all shadow-lg active:scale-95 cursor-pointer"
+            >
+              🚀 Activate Premium Credentials ($25/mo)
+            </button>
+          </div>
+        </div>
+      ) : (
+        <>
+          {activeSubTab === 'bookings' && (
         <div className="space-y-4">
           
           {providerBookings.length === 0 ? (
@@ -874,10 +916,7 @@ export const DashboardProvider: React.FC<DashboardProviderProps> = ({
                       <option key={idx} value={cName}>{cName}</option>
                     ))}
                     {providerBookings.length === 0 && (
-                      <>
-                        <option value="Executive Director Lord Charles">Lord Charles (Simulated Client)</option>
-                        <option value="Helena Rothschild">Helena Rothschild (Simulated Client)</option>
-                      </>
+                      <option disabled value="">No bookings/clients active yet</option>
                     )}
                   </select>
                 </div>
@@ -912,6 +951,176 @@ export const DashboardProvider: React.FC<DashboardProviderProps> = ({
               >
                 Submit Connection Sourcing &amp; Claim 180 mins
               </button>
+            </form>
+          </div>
+        </div>
+      )}
+        </>
+      )}
+
+      {activeSubTab === 'billing' && (
+        <div className="max-w-xl mx-auto p-6 bg-[#1c1b1b] border border-[#2a2a2a] rounded-xl relative overflow-hidden shadow-2xl space-y-6 animate-fade-in text-left">
+          <div className="absolute top-0 right-0 w-24 h-24 bg-primary/5 rounded-full blur-2xl pointer-events-none" />
+
+          <div className="text-center space-y-1">
+            <h3 className="text-lg font-bold font-serif uppercase text-white tracking-tight text-center">
+              💳 Stripe Onboarding &amp; Subscription Portal
+            </h3>
+            <p className="text-[11px] text-neutral-400 font-mono uppercase text-center">
+              Configure provider pricing payouts &amp; activate required $25/mo license.
+            </p>
+          </div>
+
+          {/* Subscription payment state */}
+          <div className="p-4 rounded-lg bg-[#131110] border border-[#2a2a2a] space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-[#2a2a2a]">
+              <div>
+                <span className="text-[9px] uppercase font-bold text-neutral-400 font-mono block">Billing Status</span>
+                <span className="text-sm font-serif font-bold text-white uppercase block">
+                  {currentUser.providerSubscriptionActive ? '🏆 Premium Authorized License' : '☆ Subscription Pending'}
+                </span>
+                {currentUser.providerSubscriptionActive && (
+                  <span className="text-[9.5px] font-mono text-neutral-500 block">Renews automatically: {currentUser.providerSubscriptionPaidUntil}</span>
+                )}
+              </div>
+              <span className={`px-2.5 py-1 rounded text-[10px] font-bold font-mono ${
+                currentUser.providerSubscriptionActive 
+                  ? 'bg-emerald-500/10 border border-emerald-500/20 text-emerald-300' 
+                  : 'bg-red-500/10 border border-red-500/20 text-red-300'
+              }`}>
+                {currentUser.providerSubscriptionActive ? 'ACTIVE' : 'INACTIVE'}
+              </span>
+            </div>
+
+            {!currentUser.providerSubscriptionActive ? (
+              <div className="space-y-3.5">
+                <p className="text-xs text-neutral-300 leading-relaxed font-sans">
+                  Our professional network requires an active <strong>$25/month</strong> developer-partner license fee to support end-to-end encrypted chats, automated calendar syncs, and custom escrow releases.
+                </p>
+                <div className="p-3.5 rounded bg-primary/5 border border-primary/25 space-y-3">
+                  <p className="text-[10px] text-neutral-400 font-mono uppercase">Authorize $25/mo Subscription fee via linked Escrow Wallet Account Balance:</p>
+                  <p className="text-amber-300 font-bold font-mono text-xs">Wallet Account Balance: ${currentUser.walletBalance?.toFixed(2)} USD</p>
+                  <button
+                    onClick={onProviderSubscribe}
+                    className="w-full py-2 bg-[#ffdebf] hover:bg-[#fdba74] text-[#492900] font-bold font-mono text-[10.5px] rounded uppercase tracking-wider hover:opacity-90 active:scale-95 transition-all shadow cursor-pointer text-center"
+                  >
+                    🚀 Authorize Billing &amp; Unlock All Features ($25/mo)
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="p-3 bg-emerald-500/5 border border-emerald-500/20 rounded">
+                <p className="text-xs text-emerald-300 font-mono font-bold">✓ premium platform features fully unlocked</p>
+                <p className="text-[10.5px] text-neutral-400 mt-1 max-w-md mx-auto leading-relaxed font-sans">
+                  Your $25.00 licensing payment is successfully verified. Monthly receipts are logged securely under your partner profile configuration.
+                </p>
+              </div>
+            )}
+          </div>
+
+          {/* Stripe / Bank Credentials section */}
+          <div className="p-4 rounded-lg bg-[#131110] border border-[#2a2a2a] space-y-4">
+            <h4 className="text-xs font-bold uppercase text-white font-mono flex items-center gap-2">
+              🏦 STRIPE CONNECT &amp; DIRECT BANK PAYOUTS
+            </h4>
+            <p className="text-[11.5px] text-neutral-400 leading-relaxed font-sans">
+              Deploy secure direct bank credentials or complete a quick Stripe Connect setup to automatically accept escrow payout releases.
+            </p>
+
+            <form onSubmit={(e) => {
+              e.preventDefault();
+              const f = e.currentTarget;
+              const bankName = (f.elements.namedItem('payoutBank') as HTMLInputElement).value;
+              const routing = (f.elements.namedItem('routingNum') as HTMLInputElement).value;
+              const account = (f.elements.namedItem('accountNum') as HTMLInputElement).value;
+
+              if (!bankName || !routing || !account) {
+                triggerNotification('Ensure all banking coordinate fields are populated.');
+                return;
+              }
+
+              onUpdateCurrentUser({
+                ...currentUser,
+                payoutBankName: bankName,
+                payoutBankRouting: routing,
+                payoutBankAccountLast4: account.slice(-4),
+                stripeAccountConnected: true,
+              });
+
+              triggerNotification('Stripe Payout Bank credentials saved successfully!');
+            }} className="space-y-3 pt-2 text-left">
+              <div className="space-y-3">
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-neutral-400 uppercase block font-mono">Recipient Payout Bank Name</label>
+                  <input
+                    name="payoutBank"
+                    type="text"
+                    required
+                    defaultValue={currentUser.payoutBankName || ''}
+                    placeholder="e.g. JPMorgan Chase Bank, N.A."
+                    className="w-full bg-[#100e0c] border border-outline-variant text-[11px] p-2.5 rounded outline-none focus:border-primary font-mono text-white"
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-bold text-neutral-400 uppercase block font-mono">Routing Number (9-digits)</label>
+                    <input
+                      name="routingNum"
+                      type="text"
+                      required
+                      maxLength={9}
+                      pattern="\d{9}"
+                      defaultValue={currentUser.payoutBankRouting || ''}
+                      placeholder="e.g. 021000021"
+                      className="w-full bg-[#100e0c] border border-outline-variant text-[11px] p-2.5 rounded outline-none focus:border-primary font-mono text-white"
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-bold text-neutral-400 uppercase block font-mono">Account Number</label>
+                    <input
+                      name="accountNum"
+                      type="password"
+                      required
+                      placeholder="e.g. ************"
+                      className="w-full bg-[#100e0c] border border-outline-variant text-[11px] p-2.5 rounded outline-none focus:border-primary font-mono text-white"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-3 pt-2 flex-wrap sm:flex-nowrap">
+                <button
+                  type="submit"
+                  className="w-full py-2 bg-[#2a2a2a] text-white hover:bg-[#3a3a3a] border border-[#3a3a3a] text-[10.5px] uppercase font-mono font-bold tracking-wider rounded transition-all cursor-pointer text-center"
+                >
+                  Save Bank Credentials
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    onUpdateCurrentUser({
+                      ...currentUser,
+                      payoutBankName: 'Stripe Direct Routing Account',
+                      payoutBankRouting: '111000025',
+                      payoutBankAccountLast4: '9984',
+                      stripeAccountConnected: true,
+                    });
+                    triggerNotification('Stripe Connect onboarding completed! Webhooks received successfully.');
+                  }}
+                  className="w-full py-2 bg-[#ffdebf] text-[#492900] hover:bg-[#fdba74] text-[10.5px] uppercase font-mono font-bold tracking-wider rounded transition-all cursor-pointer text-center"
+                >
+                  Stripe Instant Connect
+                </button>
+              </div>
+
+              {currentUser.stripeAccountConnected && (
+                <div className="p-3 bg-emerald-500/5 border border-emerald-500/20 text-center rounded text-xs text-emerald-400 font-mono">
+                  ✓ Payout connection configured on {currentUser.payoutBankName || 'Stripe Account'} (Account ending in **{currentUser.payoutBankAccountLast4 || '9984'})
+                </div>
+              )}
             </form>
           </div>
         </div>

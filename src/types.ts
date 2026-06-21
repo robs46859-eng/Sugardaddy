@@ -42,6 +42,8 @@ export interface ServiceProvider {
   isPromoted?: boolean; // spot at the top of the feed
   promotedUntil?: string; // ISO date or status
   adTimeCreditsMinutes?: number; // free ad credits earned
+  privatePhone?: string; // locked/unlocked credential routing
+  privateEmail?: string; // locked/unlocked credential routing
 }
 
 export interface Booking {
@@ -76,6 +78,7 @@ export interface Message {
   voiceDuration?: string;
   encrypted?: boolean;
   read?: boolean;
+  createdAt?: string;
 }
 
 export interface Review {
@@ -105,4 +108,27 @@ export interface UserState {
   referralsMadeCount?: number;
   discountsEarnedAmount?: number;
   adCreditsEarnedBalance?: number;
+  
+  // Subscription parameters
+  providerSubscriptionActive?: boolean;
+  providerSubscriptionPaidUntil?: string;
+  isClientPremium?: boolean;
+  clientSubscribedAt?: string;
+  
+  // Message counts & Contact unlocks
+  todayMessageCount?: number;
+  lastMessageResetDate?: string;
+  unlockedProviderContactIds?: string[];
+  unlockedCountThisMonth?: number;
+  lastUnlockResetDate?: string;
+
+  // Stripe & Bank credentials connecting
+  stripeConnectedId?: string;
+  bankName?: string;
+  accountNumber?: string;
+  routingNumber?: string;
+
+  // Onboarding parameters
+  hasCompletedClientProfile?: boolean;
+  hasCompletedProviderProfile?: boolean;
 }

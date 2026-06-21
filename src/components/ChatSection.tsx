@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Message, ServiceProvider, UserState } from '../types';
-import { Send, Lock, Mic, Image, CheckCheck, Clock, UserX, Play, Volume2, AlertTriangle } from 'lucide-react';
+import { Send, Lock, Mic, Image, CheckCheck, Clock, UserX, Play, Volume2, AlertTriangle, Download } from 'lucide-react';
 
 interface ChatSectionProps {
   currentUser: UserState;
@@ -9,6 +9,7 @@ interface ChatSectionProps {
   chatMessages: Message[];
   onBlockUser: (targetId: string) => void;
   isUserBlocked: boolean;
+  onUpgradePremium?: () => void;
 }
 
 export const ChatSection: React.FC<ChatSectionProps> = ({
@@ -18,6 +19,7 @@ export const ChatSection: React.FC<ChatSectionProps> = ({
   chatMessages,
   onBlockUser,
   isUserBlocked,
+  onUpgradePremium,
 }) => {
   const [inputText, setInputText] = useState('');
   const [expiration, setExpiration] = useState<'off' | '1h' | '24h'>('off');
@@ -25,6 +27,11 @@ export const ChatSection: React.FC<ChatSectionProps> = ({
   const [isRecording, setIsRecording] = useState(false);
   const [recordingSeconds, setRecordingSeconds] = useState(0);
   const [showExpirationMenu, setShowExpirationMenu] = useState(false);
+  
+  const isClient = currentUser.role === 'customer';
+  const limitCount = isClient ? (currentUser.isClientPremium ? 20 : 3) : 999;
+  const currentSent = isClient ? (currentUser.todayMessageCount ?? 0) : 0;
+  const limitReached = isClient && currentSent >= limitCount;
   
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const recordingTimer = useRef<NodeJS.Timeout | null>(null);
@@ -54,9 +61,7 @@ export const ChatSection: React.FC<ChatSectionProps> = ({
   const handleSend = () => {
     if (!inputText.trim() || isUserBlocked) return;
     
-    // Simulate typing trigger on second party
-    setIsTyping(true);
-    
+    // No typing indicator or AI replies simulate since AI bot is deactivated.
     const newMsg: Message = {
       id: `msg_${Date.now()}`,
       chatId: `${provider.id}_${currentUser.id}`,
@@ -70,30 +75,39 @@ export const ChatSection: React.FC<ChatSectionProps> = ({
 
     onSendMessage(newMsg);
     setInputText('');
+  };
 
-    // Mock answer from provider based on their bio
-    setTimeout(() => {
-      setIsTyping(false);
-      const responses = [
-        `Thank you for reaching out to my private circle. I'm currently finalizing a consulting charter, but my calendar has slots on Saturday open for event hosting.`,
-        `Fascinated by your brief! Let's finalize the escrow transaction and schedule a video consultation to review the itinerary in detail.`,
-        `Hello there. Yes, I'm fully available for the VIP appearance. My elite concierge takes care of the booking fee release forms immediately.`,
-        `Perfect. I have reviewed the requirements. Let's keep all payments secured inside the client escrow protocol for mutual trust.`
-      ];
-      const randomReply = responses[Math.floor(Math.random() * responses.length)];
-      
-      const replyMsg: Message = {
-        id: `msg_reply_${Date.now()}`,
-        chatId: `${provider.id}_${currentUser.id}`,
-        senderId: provider.id,
-        senderName: provider.name,
-        text: randomReply,
-        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        encrypted: true,
-        read: true
-      };
-      onSendMessage(replyMsg);
-    }, 3000);
+  const handleExportChat = () => {
+    if (chatMessages.length === 0) return;
+    
+    const formattedDate = new Date().toLocaleString();
+    const txtContent = `--------------------------------------------------
+LUXE PLATFORM - CHAT TRANSCRIPT RECORD (SECURED)
+--------------------------------------------------
+Export Timestamp: ${formattedDate}
+Current User: ${currentUser.name} (ID: ${currentUser.id}, Role: ${currentUser.role})
+Chat Partner: ${provider.name} (ID: ${provider.id}, Specialty: ${provider.title})
+Storage Lifespan Policy: 30 Days Client-Side Cache Enforced
+--------------------------------------------------
+
+${chatMessages.map(m => {
+  const isMe = m.senderId === currentUser.id;
+  const tag = isMe ? 'SENT' : 'RECEIVED';
+  return `[${m.timestamp}] <${tag}> ${m.senderName}: ${m.text}`;
+}).join('\n\n')}
+
+--------------------------------------------------
+End of secured encryption record export. Conforms to GDPR Art. 15.
+--------------------------------------------------`;
+
+    const blob = new Blob([txtContent], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', `SecureChat_${provider.name.replace(/\s+/g, '_')}_${new Date().toISOString().slice(0, 10)}.txt`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   };
 
   const handleSendVoice = () => {
@@ -153,6 +167,11 @@ export const ChatSection: React.FC<ChatSectionProps> = ({
           <span>E2E SECURED CHAT INTERACTION</span>
         </div>
         <div className="flex items-center gap-3">
+          {isClient && (
+            <span className="bg-neutral-900 text-[#ffdebf] border border-[#a28a75]/30 px-2.5 py-0.5 rounded text-[10px] font-bold font-mono">
+              DAILY QUOTA: {currentSent}/{limitCount} SENT
+            </span>
+          )}
           {expiration !== 'off' && (
             <span className="bg-primary/20 text-primary border border-primary/30 px-1.5 py-0.5 rounded text-[10px] uppercase font-bold flex items-center gap-1">
               <Clock className="w-2.5 h-2.5" /> Limits: {expiration}
@@ -215,6 +234,17 @@ export const ChatSection: React.FC<ChatSectionProps> = ({
               </div>
             )}
           </div>
+
+          {/* Export Chat Button */}
+          {chatMessages.length > 0 && (
+            <button
+              onClick={handleExportChat}
+              className="p-2 rounded-lg bg-surface hover:bg-surface-bright text-primary hover:scale-105 transition-all border border-outline-variant"
+              title="Export Private Chat Transcript"
+            >
+              <Download className="w-4 h-4" />
+            </button>
+          )}
 
           {/* Block User Control */}
           <button 
@@ -313,7 +343,31 @@ export const ChatSection: React.FC<ChatSectionProps> = ({
 
       {/* Input Tray Area */}
       <div className="p-3 bg-[#100e0c] border-t border-outline-variant">
-        {isUserBlocked ? (
+        {limitReached ? (
+          <div className="bg-amber-500/5 border border-amber-500/20 p-4 rounded-xl text-center space-y-3">
+            <div className="flex items-center justify-center gap-2 text-amber-300">
+              <Lock className="w-4 h-4" />
+              <span className="font-mono text-[10px] uppercase font-bold tracking-wider">DAILY SECURED MESSAGE LIMIT REACHED</span>
+            </div>
+            {!currentUser.isClientPremium ? (
+              <div className="space-y-2.5">
+                <p className="text-[11px] text-neutral-300 max-w-sm mx-auto leading-relaxed">
+                  Basic clients are entitled to 3 private messages per day. Upgrade to Premium Membership to send 20 messages daily & unlock direct contacts!
+                </p>
+                <button
+                  onClick={onUpgradePremium}
+                  className="px-4 py-1.5 bg-[#ffdebf] hover:bg-[#fdba74] text-[#492900] rounded-lg text-xs font-bold transition-all hover:scale-105 active:scale-95 shadow font-mono uppercase tracking-wider"
+                >
+                  🚀 Upgrade to Premium ($25/mo)
+                </button>
+              </div>
+            ) : (
+              <p className="text-[11px] text-neutral-400 max-w-sm mx-auto leading-relaxed font-sans">
+                You have reached your Premium tier limit of 20 secure messages per day. Re-boost counters tomorrow!
+              </p>
+            )}
+          </div>
+        ) : isUserBlocked ? (
           <div className="bg-red-500/10 border border-red-500/25 p-3 rounded-lg text-center text-xs text-red-300 flex items-center justify-center gap-2">
             <AlertTriangle className="w-4 h-4 text-red-400" />
             <span className="font-mono uppercase text-[10px] tracking-wider">Secured chat is paused. Review active filters.</span>

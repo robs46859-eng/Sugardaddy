@@ -1,7 +1,7 @@
 import React from 'react';
 
 interface CitySkylineProps {
-  city: 'New York' | 'Los Angeles' | 'Miami' | 'London' | 'Paris';
+  city: 'New York' | 'Los Angeles' | 'Miami' | 'London' | 'Paris' | 'Denver' | 'San Francisco' | 'San Diego' | 'Dallas' | 'Chicago' | 'Philadelphia' | 'Las Vegas' | 'Seattle' | 'Portland' | 'Washington DC' | 'Puerto Rico' | 'Boston' | 'Austin' | 'Phoenix' | 'Atlanta' | 'Nashville' | 'Detroit' | 'Barcelona' | 'Pittsburgh' | 'Cincinnati';
   color?: string;
 }
 
@@ -9,6 +9,20 @@ export const CitySkyline: React.FC<CitySkylineProps> = ({
   city, 
   color = 'stroke-primary/15' 
 }) => {
+  const mappedCity = (() => {
+    const nyGroup = ['New York', 'Dallas', 'Chicago', 'Philadelphia', 'Boston', 'Phoenix', 'Atlanta', 'Detroit', 'Pittsburgh', 'Cincinnati', 'Washington DC'];
+    const laGroup = ['Los Angeles', 'Denver', 'San Francisco', 'San Diego', 'Las Vegas', 'Seattle', 'Portland', 'Austin', 'Nashville'];
+    const miamiGroup = ['Miami', 'Puerto Rico'];
+    const parisGroup = ['Paris', 'Barcelona'];
+    
+    if (city === 'London') return 'London';
+    if (nyGroup.includes(city)) return 'New York';
+    if (laGroup.includes(city)) return 'Los Angeles';
+    if (miamiGroup.includes(city)) return 'Miami';
+    if (parisGroup.includes(city)) return 'Paris';
+    return 'New York';
+  })();
+
   return (
     <div className="fixed bottom-0 left-0 right-0 h-[240px] pointer-events-none z-0 overflow-hidden select-none select-none transition-all duration-700 ease-in-out opacity-25 md:opacity-35">
       <svg
@@ -18,7 +32,7 @@ export const CitySkyline: React.FC<CitySkylineProps> = ({
         xmlns="http://www.w3.org/2000/svg"
       >
         <g fill="none" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round">
-          {city === 'New York' && (
+          {mappedCity === 'New York' && (
             <>
               {/* Backing Distant Hills/Water Lines */}
               <path d="M0,230 L1440,230" strokeWidth="0.5" className="stroke-primary/5" />
@@ -77,7 +91,7 @@ export const CitySkyline: React.FC<CitySkylineProps> = ({
             </>
           )}
 
-          {city === 'Los Angeles' && (
+          {mappedCity === 'Los Angeles' && (
             <>
               {/* Rolling Hollywood Hills Outline backdrop */}
               <path d="M0,210 Q200,170 450,195 T900,160 T1440,200" strokeWidth="0.6" className="stroke-primary/10" />
@@ -130,7 +144,7 @@ export const CitySkyline: React.FC<CitySkylineProps> = ({
             </>
           )}
 
-          {city === 'Miami' && (
+          {mappedCity === 'Miami' && (
             <>
               {/* Wave ripples underlay for ocean front shore */}
               <path d="M0,230 C300,226 600,233 900,227 C1200,231 1380,225 1440,230" strokeWidth="0.8" className="stroke-primary/10" />
@@ -188,7 +202,7 @@ export const CitySkyline: React.FC<CitySkylineProps> = ({
             </>
           )}
 
-          {city === 'London' && (
+          {mappedCity === 'London' && (
             <>
               {/* River Thames backdrop lines */}
               <path d="M0,228 L1440,228" strokeWidth="0.5" className="stroke-primary/10" />
@@ -253,7 +267,7 @@ export const CitySkyline: React.FC<CitySkylineProps> = ({
             </>
           )}
 
-          {city === 'Paris' && (
+          {mappedCity === 'Paris' && (
             <>
               {/* Seine River subtle water horizontal lines */}
               <path d="M0,226 L1440,226" strokeWidth="0.5" className="stroke-primary/10" />

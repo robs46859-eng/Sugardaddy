@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { VerificationChecklist } from '../types';
 import { ShieldCheck, FileText, Smartphone, Mail, Camera, Upload, Lock, Shield } from 'lucide-react';
 
@@ -21,6 +21,24 @@ export const VerificationCenter: React.FC<VerificationCenterProps> = ({
   const [isCapturing, setIsCapturing] = useState(false);
   const [uploadedIdName, setUploadedIdName] = useState<string | null>(null);
   const [isDragOver, setIsDragOver] = useState(false);
+
+  const idInputRef = useRef<HTMLInputElement>(null);
+  const credentialInputRef = useRef<HTMLInputElement>(null);
+
+  const handleIdFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setUploadedIdName(file.name);
+      onUpdateVerification({ governmentId: 'pending' });
+    }
+  };
+
+  const handleCredentialFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      onUpdateVerification({ professionalCredential: 'pending' });
+    }
+  };
 
   // Stats calculation
   const totalSteps = userType === 'provider' ? 5 : 4;
@@ -244,22 +262,44 @@ export const VerificationCenter: React.FC<VerificationCenterProps> = ({
                 onDragOver={(e) => { e.preventDefault(); setIsDragOver(true); }}
                 onDragLeave={() => setIsDragOver(false)}
                 onDrop={handleIdDrop}
+                onClick={() => idInputRef.current?.click()}
                 className={`border-2 border-dashed rounded p-6 text-center transition-colors cursor-pointer ${
                   isDragOver ? 'border-primary bg-primary/5' : 'border-outline-variant hover:border-[#849588]'
                 }`}
               >
+                <input 
+                  type="file"
+                  ref={idInputRef}
+                  onChange={handleIdFileChange}
+                  accept="image/*,application/pdf"
+                  className="hidden"
+                />
                 <Upload className="w-8 h-8 text-neutral-500 mx-auto mb-2" />
                 <p className="text-xs font-bold text-neutral-350">Drag &amp; Drop Passport / ID Card</p>
-                <p className="text-[11px] text-neutral-500 mt-1">Supports PDF, PNG, JPG up to 10MB file formats or...</p>
-                <button 
-                  onClick={() => {
-                    setUploadedIdName('Simulated_Passport_ID.jpg');
-                    onUpdateVerification({ governmentId: 'pending' });
-                  }}
-                  className="mt-3 px-4 py-1.5 bg-[#2c2a27] hover:bg-[#373432] text-neutral-200 text-xs font-bold rounded font-mono border border-outline-variant active:scale-95 uppercase tracking-wider"
-                >
-                  Upload Simulated ID Document
-                </button>
+                <p className="text-[11px] text-neutral-500 mt-1">Supports PDF, PNG, JPG formats. Click to browse local files 📁</p>
+                <div className="flex gap-2 justify-center mt-3">
+                  <button 
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      idInputRef.current?.click();
+                    }}
+                    className="px-3 py-1.5 bg-primary/20 hover:bg-primary/30 text-primary hover:text-white text-[11px] font-mono font-bold rounded border border-primary/30 active:scale-95 uppercase tracking-wider"
+                  >
+                    Browse Local File 📁
+                  </button>
+                  <button 
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setUploadedIdName('Simulated_Passport_ID.jpg');
+                      onUpdateVerification({ governmentId: 'pending' });
+                    }}
+                    className="px-3 py-1.5 bg-[#2c2a27] hover:bg-[#373432] text-neutral-200 text-[11px] font-bold rounded font-mono border border-outline-variant active:scale-95 uppercase tracking-wider"
+                  >
+                    Simulate ID
+                  </button>
+                </div>
               </div>
             )}
           </div>
@@ -421,16 +461,43 @@ export const VerificationCenter: React.FC<VerificationCenterProps> = ({
                 </button>
               </div>
             ) : (
-              <div className="border border-dashed border-outline-variant p-6 rounded text-center bg-black/20">
+              <div 
+                onClick={() => credentialInputRef.current?.click()}
+                className="border border-dashed border-outline-variant p-6 rounded text-center bg-black/20 cursor-pointer hover:border-primary/50 transition-colors"
+              >
+                <input 
+                  type="file"
+                  ref={credentialInputRef}
+                  onChange={handleCredentialFileChange}
+                  accept="image/*,application/pdf"
+                  className="hidden"
+                />
                 <FileText className="w-8 h-8 text-neutral-500 mx-auto mb-2" />
                 <p className="text-xs font-bold text-neutral-350">Upload Professional Credentials or Licenses</p>
-                <p className="text-[10px] text-neutral-500 mt-1">E.g., Business certifications, Wellness Accreditations, Flight Licenses</p>
-                <button 
-                  onClick={() => onUpdateVerification({ professionalCredential: 'pending' })}
-                  className="mt-3 px-4 py-1.5 bg-[#2c2a27] hover:bg-[#373432] text-neutral-200 text-xs font-bold rounded font-mono border border-outline-variant active:scale-95 uppercase tracking-wider"
-                >
-                  Submit Certified Documents
-                </button>
+                <p className="text-[10px] text-neutral-500 mt-1">Accepts PDF, image formats. Click to browse local files 📁</p>
+                
+                <div className="flex gap-2 justify-center mt-3">
+                  <button 
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      credentialInputRef.current?.click();
+                    }}
+                    className="px-3.5 py-1.5 bg-primary/20 hover:bg-primary/30 text-primary hover:text-white text-xs font-mono font-bold rounded border border-primary/30 active:scale-95 uppercase tracking-wider"
+                  >
+                    Browse Local File 📁
+                  </button>
+                  <button 
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onUpdateVerification({ professionalCredential: 'pending' });
+                    }}
+                    className="px-3.5 py-1.5 bg-[#2c2a27] hover:bg-[#373432] text-neutral-200 text-xs font-bold rounded font-mono border border-outline-variant active:scale-95 uppercase tracking-wider"
+                  >
+                    Submit Test Info
+                  </button>
+                </div>
               </div>
             )}
           </div>

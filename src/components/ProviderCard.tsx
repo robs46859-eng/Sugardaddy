@@ -2,12 +2,17 @@ import React, { useState } from 'react';
 import { ServiceProvider } from '../types';
 import { Star, MapPin, CheckCircle2, ShieldAlert, Heart, MessageSquare, ChevronRight, ChevronLeft, X, Film, Image as ImageIcon } from 'lucide-react';
 
+import { UserState } from '../types';
+
 interface ProviderCardProps {
   provider: ServiceProvider;
   isSaved: boolean;
   onToggleSave: () => void;
   onSelectBook: () => void;
   onStartChat: () => void;
+  currentUser?: UserState;
+  onUnlockContact?: (providerId: string) => void;
+  onUpgradePremium?: () => void;
 }
 
 export const ProviderCard: React.FC<ProviderCardProps> = ({
@@ -16,6 +21,9 @@ export const ProviderCard: React.FC<ProviderCardProps> = ({
   onToggleSave,
   onSelectBook,
   onStartChat,
+  currentUser,
+  onUnlockContact,
+  onUpgradePremium,
 }) => {
   // Check validation status count
   const verifiedCount = Object.values(provider.verification).filter(v => v === 'verified').length;
@@ -178,6 +186,58 @@ export const ProviderCard: React.FC<ProviderCardProps> = ({
             <span className="text-[#9e8e80] text-[10px] block -mt-1 uppercase font-mono">/ {provider.priceUnit}</span>
           </div>
         </div>
+
+        {/* Private Contact Information Unlock Section */}
+        {currentUser && currentUser.role === 'customer' && (
+          <div className="mb-4 p-2.5 rounded-lg border border-outline-variant bg-[#131110] text-center space-y-2">
+            <span className="text-[9px] uppercase font-bold text-[#849588] font-mono block tracking-wider">
+              🔒 Verified Direct Contact Link
+            </span>
+            {currentUser.isClientPremium ? (
+              currentUser.unlockedProviderContactIds?.includes(provider.id) ? (
+                <div className="space-y-1 py-1 px-2 rounded bg-primary/5 border border-primary/20">
+                  <p className="text-xs text-neutral-200 font-mono flex items-center justify-center gap-1.5">
+                    <span>📞</span> Private Line: <strong className="text-primary tracking-wide select-all">{provider.privatePhone || "+1 (555) 791-0023"}</strong>
+                  </p>
+                  <p className="text-[10.5px] text-neutral-300 font-mono flex items-center justify-center gap-1.5">
+                    <span>✉️</span> Secure Email: <strong className="text-[#ffdebf] tracking-wide select-all">{provider.privateEmail || `${provider.name.toLowerCase().replace(/\s+/g, '')}@exclusive.private`}</strong>
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  <p className="text-[11px] text-neutral-400 font-sans italic px-1">
+                    Direct details are locked. Premium connects include up to 3 direct unlocks per month.
+                  </p>
+                  {(currentUser.unlockedCountThisMonth || 0) < 3 ? (
+                    <button
+                      onClick={() => onUnlockContact?.(provider.id)}
+                      className="w-full py-1.5 bg-gradient-to-r from-amber-500/20 to-primary/25 hover:from-amber-400 hover:to-primary hover:text-[#2c1a04] text-primary font-mono text-[9.5px] font-bold uppercase rounded border border-primary/30 transition-all cursor-pointer shadow-sm"
+                    >
+                      🔓 Unlock Direct Contact Info ({3 - (currentUser.unlockedCountThisMonth || 0)} left)
+                    </button>
+                  ) : (
+                    <p className="text-[10px] text-rose-400 font-bold font-mono">
+                      Monthly Lock Limit (3/3 used. Resets on new calendar billing cycle)
+                    </p>
+                  )}
+                </div>
+              )
+            ) : (
+              <div className="space-y-2">
+                <div className="relative py-1 border border-dashed border-outline-variant/40 rounded filter blur-[2px] opacity-40 select-none">
+                  <p className="text-[11px] font-mono text-neutral-405">📞 +1 (555) 791-0023</p>
+                  <p className="text-[10.5px] font-mono text-neutral-410">✉️ service@exclusive.private</p>
+                </div>
+                <button
+                  onClick={onUpgradePremium}
+                  className="w-full py-1.5 bg-gradient-to-r from-[#ffdebf]/10 to-primary/10 hover:from-primary hover:to-amber-300 hover:text-[#2c1a04] text-primary font-mono text-[9.5px] font-bold uppercase rounded border border-primary/20 transition-all cursor-pointer shadow-sm animate-pulse"
+                >
+                  🔒 Unlock with Premium Membership ($25/mo)
+                </button>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Quick Interaction Keys */}
         <div className="grid grid-cols-2 gap-2 mt-auto">

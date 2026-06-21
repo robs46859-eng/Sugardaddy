@@ -38,9 +38,112 @@ export const MyProfileSettings: React.FC<MyProfileSettingsProps> = ({
   const [videoDurations, setVideoDurations] = useState<{ [key: string]: number }>({});
   const [isUploading, setIsUploading] = useState(false);
   
+  // Drag and drop local file feedback states
+  const [isPhotoDragActive, setIsPhotoDragActive] = useState(false);
+  const [isVideoDragActive, setIsVideoDragActive] = useState(false);
+  
   const fileInputRef = useRef<HTMLInputElement>(null);
   const galleryInputRef = useRef<HTMLInputElement>(null);
   const videoInputRef = useRef<HTMLInputElement>(null);
+
+  // Drag-and-drop for local image file uploading
+  const handlePhotoDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsPhotoDragActive(false);
+    const files = e.dataTransfer.files;
+    if (!files) return;
+
+    const remainingSlots = 8 - profileImages.length;
+    if (remainingSlots <= 0) {
+      triggerNotification('Gallery limit reached: You can upload up to 8 images.');
+      return;
+    }
+
+    const filesToUpload = Array.from(files).slice(0, remainingSlots) as File[];
+    filesToUpload.forEach((file: File) => {
+      if (!file.type.startsWith('image/')) {
+        triggerNotification(`File ${file.name} is not a valid image.`);
+        return;
+      }
+
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const dataUrl = event.target?.result as string;
+        setProfileImages(prev => {
+          if (prev.length >= 8) return prev;
+          return [...prev, dataUrl];
+        });
+      };
+      reader.readAsDataURL(file);
+    });
+    triggerNotification('Local images drop accepted!');
+  };
+
+  // Drag-and-drop for local video file uploading
+  const handleVideoDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsVideoDragActive(false);
+    const files = e.dataTransfer.files;
+    if (!files || files.length === 0) return;
+
+    if (profileVideos.length >= 2) {
+      triggerNotification('Video limit reached: You can upload up to 2 videos.');
+      return;
+    }
+
+    const file = files[0];
+    if (!file.type.startsWith('video/')) {
+      triggerNotification('Please upload a valid MP4/video file.');
+      return;
+    }
+
+    // Load video element in memory to inspect duration
+    const videoUrl = URL.createObjectURL(file);
+    const videoElement = document.createElement('video');
+    videoElement.preload = 'metadata';
+    
+    triggerNotification('Analyzing local video length...');
+
+    videoElement.onloadedmetadata = () => {
+      const duration = videoElement.duration;
+      URL.revokeObjectURL(videoUrl);
+
+      if (duration > 10.5) {
+        triggerNotification(`Rejected: Length is ${duration.toFixed(1)} seconds. Must not exceed 10.0 seconds.`);
+        alert(`Security Check: Video exceeds 10 seconds limit (${duration.toFixed(1)}s). Select a shorter file.`);
+        return;
+      }
+
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const base64 = event.target?.result as string;
+        setProfileVideos(prev => {
+          if (prev.length >= 2) return prev;
+          return [...prev, base64];
+        });
+        setVideoDurations(prev => ({
+          ...prev,
+          [base64]: duration
+        }));
+        triggerNotification(`Success: Approved video of ${duration.toFixed(1)} seconds!`);
+      };
+      reader.readAsDataURL(file);
+    };
+
+    videoElement.onerror = () => {
+      URL.revokeObjectURL(videoUrl);
+      triggerNotification('Could not parse video length. Assuming under 10 seconds for sandbox.');
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const base64 = event.target?.result as string;
+        setProfileVideos(prev => {
+          if (prev.length >= 2) return prev;
+          return [...prev, base64];
+        });
+      };
+      reader.readAsDataURL(file);
+    };
+  };
 
   // Preselected high-quality luxury stock media to prefill or test with
   const PRESET_IMAGES = [
@@ -430,22 +533,34 @@ export const MyProfileSettings: React.FC<MyProfileSettingsProps> = ({
             {profileImages.length === 0 ? (
               <div 
                 onClick={() => galleryInputRef.current?.click()}
-                className="border-2 border-dashed border-outline-variant rounded-xl p-8 text-center cursor-pointer hover:border-primary/50 hover:bg-neutral-900/20 transition-all space-y-2"
+                onDragOver={(e) => { e.preventDefault(); setIsPhotoDragActive(true); }}
+                onDragLeave={() => setIsPhotoDragActive(false)}
+                onDrop={handlePhotoDrop}
+                className={`border-2 border-dashed rounded-xl p-8 text-center cursor-pointer transition-all space-y-2 ${
+                  isPhotoDragActive ? 'border-primary bg-primary/10' : 'border-outline-variant hover:border-primary/50 hover:bg-neutral-900/20'
+                }`}
               >
                 <UploadCloud className="w-6 h-6 text-neutral-500 mx-auto" />
-                <p className="text-[11px] font-mono text-neutral-400 uppercase">Interactive Image drop box</p>
+                <p className="text-[11px] font-mono text-neutral-400 uppercase font-bold">Interactive Local Image Drop Box 📁</p>
                 <p className="text-[10px] text-neutral-500 leading-snug">
-                  Choose up to 8 portfolio images. Ideal resolution: 800x600px. Click or drop files to insert.
+                  Choose or drag up to 8 images from your local directories. Ideal resolution: 800x600px. Click or drop files here.
                 </p>
               </div>
             ) : (
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+              <div 
+                onDragOver={(e) => { e.preventDefault(); setIsPhotoDragActive(true); }}
+                onDragLeave={() => setIsPhotoDragActive(false)}
+                onDrop={handlePhotoDrop}
+                className={`grid grid-cols-2 sm:grid-cols-4 gap-2.5 p-2.5 border-2 rounded-xl transition-all ${
+                  isPhotoDragActive ? 'border-primary border-dashed bg-primary/5' : 'border-neutral-800/40 bg-neutral-950/20'
+                }`}
+              >
                 {profileImages.map((img, idx) => (
                   <div key={idx} className="relative group rounded-lg overflow-hidden border border-outline-variant h-20 bg-neutral-950">
                     <img src={img} alt={`Gallery index element ${idx}`} className="w-full h-full object-cover" />
                     
                     {/* Badge index helper */}
-                    <span className="absolute top-1 left-1.5 bg-black/60 text-[9px] font-mono px-1 rounded text-white z-10">#{idx+1}</span>
+                    <span className="absolute top-1 left-1.5 bg-black/60 text-[9px] font-mono px-1 rounded text-white z-10 font-bold">#{idx+1}</span>
 
                     <button
                       type="button"
@@ -461,10 +576,10 @@ export const MyProfileSettings: React.FC<MyProfileSettingsProps> = ({
                   <button
                     type="button"
                     onClick={() => galleryInputRef.current?.click()}
-                    className="border-2 border-dashed border-outline-variant rounded-lg flex flex-col items-center justify-center text-neutral-500 hover:border-primary hover:text-white transition-all h-20 bg-[#100e0c]/30"
+                    className="border-2 border-dashed border-outline-variant rounded-lg flex flex-col items-center justify-center text-neutral-400 hover:border-primary hover:text-white transition-all h-20 bg-[#100e0c]/30 cursor-pointer"
                   >
                     <UploadCloud className="w-5 h-5 mb-1 text-neutral-500" />
-                    <span className="text-[9px] font-mono uppercase font-bold">Add Photo</span>
+                    <span className="text-[9px] font-mono uppercase font-bold">Add Photo 📁</span>
                   </button>
                 )}
               </div>
@@ -499,16 +614,28 @@ export const MyProfileSettings: React.FC<MyProfileSettingsProps> = ({
             {profileVideos.length === 0 ? (
               <div 
                 onClick={() => videoInputRef.current?.click()}
-                className="border-2 border-dashed border-outline-variant rounded-xl p-8 text-center cursor-pointer hover:border-primary/50 hover:bg-neutral-900/20 transition-all space-y-2"
+                onDragOver={(e) => { e.preventDefault(); setIsVideoDragActive(true); }}
+                onDragLeave={() => setIsVideoDragActive(false)}
+                onDrop={handleVideoDrop}
+                className={`border-2 border-dashed rounded-xl p-8 text-center cursor-pointer transition-all space-y-2 ${
+                  isVideoDragActive ? 'border-primary bg-primary/10' : 'border-outline-variant hover:border-primary/50 hover:bg-neutral-900/20'
+                }`}
               >
                 <Film className="w-6 h-6 text-neutral-500 mx-auto" />
-                <p className="text-[11px] font-mono text-neutral-400 uppercase">Secured 10-Second Showcase</p>
+                <p className="text-[11px] font-mono text-neutral-400 uppercase font-bold">Secured 10s Video Drop Box 📁</p>
                 <p className="text-[10px] text-neutral-500 leading-snug">
-                  Choose up to 2 files. Video length <span className="text-secondary font-bold font-mono">strictly restricted &le; 10s</span>. Our browser engine parses metadata on submittal to safeguard compliance index.
+                  Drag and drop up to 2 video clips from local directories here, or click to choose files. Duration limit: &le; 10s.
                 </p>
               </div>
             ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div 
+                onDragOver={(e) => { e.preventDefault(); setIsVideoDragActive(true); }}
+                onDragLeave={() => setIsVideoDragActive(false)}
+                onDrop={handleVideoDrop}
+                className={`grid grid-cols-1 sm:grid-cols-2 gap-3 p-2.5 border-2 rounded-xl transition-all ${
+                  isVideoDragActive ? 'border-primary border-dashed bg-primary/5' : 'border-transparent'
+                }`}
+              >
                 {profileVideos.map((vid, idx) => (
                   <div key={idx} className="relative rounded-lg overflow-hidden border border-outline-variant bg-neutral-950 p-2.5 space-y-2 flex flex-col justify-between">
                     <div className="relative aspect-video rounded overflow-hidden">
@@ -531,7 +658,7 @@ export const MyProfileSettings: React.FC<MyProfileSettingsProps> = ({
                       <button
                         type="button"
                         onClick={() => handleRemoveVideo(idx)}
-                        className="text-rose-400 hover:text-rose-300 font-bold uppercase text-[9px] flex items-center gap-1 leading-none"
+                        className="text-rose-400 hover:text-rose-300 font-bold uppercase text-[9px] flex items-center gap-1 leading-none cursor-pointer"
                       >
                         <Trash2 className="w-3 h-3" />
                         <span>Remove</span>
@@ -543,10 +670,10 @@ export const MyProfileSettings: React.FC<MyProfileSettingsProps> = ({
                 {profileVideos.length < 2 && (
                   <div 
                     onClick={() => videoInputRef.current?.click()}
-                    className="border-2 border-dashed border-outline-variant rounded-lg flex flex-col items-center justify-center text-neutral-500 hover:border-primary hover:text-white transition-all h-[135px] cursor-pointer bg-[#100e0c]/30 p-4 text-center"
+                    className="border-2 border-dashed border-outline-variant rounded-lg flex flex-col items-center justify-center text-neutral-400 hover:border-primary hover:text-white transition-all h-[135px] cursor-pointer bg-[#100e0c]/30 p-4 text-center"
                   >
                     <UploadCloud className="w-6 h-6 mb-1 text-neutral-500" />
-                    <span className="text-[10px] font-mono uppercase font-bold block text-neutral-400">Add Next Showcase Video</span>
+                    <span className="text-[10px] font-mono uppercase font-bold block text-neutral-400">Add Next Showcase Video 📁</span>
                     <span className="text-[9px] text-[#9e8e80] mt-1 block">Max 10 seconds duration</span>
                   </div>
                 )}

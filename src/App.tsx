@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { 
   Role, 
   Category, 
@@ -21,6 +21,11 @@ import ExportCenter from './components/ExportCenter';
 import DashboardCustomer from './components/DashboardCustomer';
 import DashboardProvider from './components/DashboardProvider';
 import DashboardAdmin from './components/DashboardAdmin';
+import AuthPortal from './components/AuthPortal';
+import WorkspaceHub from './components/WorkspaceHub';
+import OnboardingWizard from './components/OnboardingWizard';
+import { auth, googleAuthProvider } from './lib/firebase';
+import { onAuthStateChanged, signInWithPopup } from 'firebase/auth';
 
 import { 
   Star, 
@@ -50,33 +55,50 @@ import {
   MessageSquare, 
   RefreshCw,
   Sliders,
-  Compass as Globe
+  Compass as Globe,
+  ArrowLeft,
+  ArrowRight
 } from 'lucide-react';
 
 export default function App() {
   // Core application States
   const [categories, setCategories] = useState<Category[]>(INITIAL_CATEGORIES);
-  const [providers, setProviders] = useState<ServiceProvider[]>(INITIAL_PROVIDERS);
+  const [providers, setProviders] = useState<ServiceProvider[]>([]);
   
+  // Auth state
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [googleAccessToken, setGoogleAccessToken] = useState<string | null>(null);
+
+  // Portal switching & Transition states
+  const [portalViewMode, setPortalViewMode] = useState<'client' | 'provider'>('client');
+  const [isTransitioning, setIsTransitioning] = useState(false);
+  const [transitionTarget, setTransitionTarget] = useState<'client' | 'provider' | null>(null);
+  const [transitionMessage, setTransitionMessage] = useState('');
+
   // Current user initial setup
   const [currentUser, setCurrentUser] = useState<UserState>({
     id: 'cust_99',
     name: 'Marcus Sterling',
     email: 'robs46859@gmail.com',
     role: 'customer',
-    walletBalance: 1500,
-    savedProviderIds: ['prov_1'],
+    walletBalance: 0,
+    savedProviderIds: [],
     verification: {
       governmentId: 'verified',
       selfie: 'verified',
       phone: 'verified',
       email: 'verified',
     },
-    blockedUserIds: []
+    blockedUserIds: [],
+    hasCompletedClientProfile: true, // Marcus stars completed
+    hasCompletedProviderProfile: false,
+    providerSubscriptionActive: false,
+    isClientPremium: true // starts premium so they can switch viewpoints!
   });
 
-  const [activeTab, setActiveTab] = useState<'browse' | 'dashboard' | 'admin' | 'verification' | 'export'>('browse');
-  const [userCity, setUserCity] = useState<'New York' | 'Los Angeles' | 'Miami' | 'London' | 'Paris'>('New York');
+  const [activeTab, setActiveTab] = useState<'browse' | 'dashboard' | 'admin' | 'verification' | 'export' | 'workspace'>('browse');
+
+  const [userCity, setUserCity] = useState<'New York' | 'Los Angeles' | 'Miami' | 'London' | 'Paris' | 'Denver' | 'San Francisco' | 'San Diego' | 'Dallas' | 'Chicago' | 'Philadelphia' | 'Las Vegas' | 'Seattle' | 'Portland' | 'Washington DC' | 'Puerto Rico' | 'Boston' | 'Austin' | 'Phoenix' | 'Atlanta' | 'Nashville' | 'Detroit' | 'Barcelona' | 'Pittsburgh' | 'Cincinnati'>('New York');
   
   // Filter States
   const [selectedCategory, setSelectedCategory] = useState<string>('All Luxe');
@@ -87,10 +109,158 @@ export default function App() {
 
   // Interactive Overlays & Modals
   const [selectedProvider, setSelectedProvider] = useState<ServiceProvider | null>(null);
-  const [showBookingModal, setShowBookingModal] = useState(false);
+   const [showBookingModal, setShowBookingModal] = useState(false);
   const [chattingWithProvider, setChattingWithProvider] = useState<ServiceProvider | null>(null);
   const [notifications, setNotifications] = useState<string[]>([]);
   const [isOfflineMode, setIsOfflineMode] = useState(false);
+
+  // --- IN-APP NAVIGATION HISTORY ENGINE ---
+  const [navigationHistory, setNavigationHistory] = useState<any[]>([]);
+  const [navigationForward, setNavigationForward] = useState<any[]>([]);
+  const [isNavigatingHistory, setIsNavigatingHistory] = useState(false);
+
+  const prevNavStateRef = useRef<any>(null);
+
+  useEffect(() => {
+    // Collect the current relevant state to form a unique snapshot
+    const currentNavState = {
+      activeTab,
+      selectedCategory,
+      selectedProviderId: selectedProvider?.id || null,
+      chattingWithProviderId: chattingWithProvider?.id || null,
+      portalViewMode,
+    };
+
+    if (!prevNavStateRef.current) {
+      prevNavStateRef.current = currentNavState;
+      return;
+    }
+
+    const prev = prevNavStateRef.current;
+    const hasChanged =
+      prev.activeTab !== currentNavState.activeTab ||
+      prev.selectedCategory !== currentNavState.selectedCategory ||
+      prev.selectedProviderId !== currentNavState.selectedProviderId ||
+      prev.chattingWithProviderId !== currentNavState.chattingWithProviderId ||
+      prev.portalViewMode !== currentNavState.portalViewMode;
+
+    if (hasChanged) {
+      if (!isNavigatingHistory) {
+        // Push previous state of application into history Stack
+        setNavigationHistory((oldHistory) => [...oldHistory, prev]);
+        // Reset forward elements on new direct client interaction
+        setNavigationForward([]);
+      }
+      prevNavStateRef.current = currentNavState;
+    }
+  }, [activeTab, selectedCategory, selectedProvider, chattingWithProvider, portalViewMode, isNavigatingHistory]);
+
+  const handleGoBack = () => {
+    if (navigationHistory.length === 0) return;
+
+    setIsNavigatingHistory(true);
+    const historyCopy = [...navigationHistory];
+    const targetState = historyCopy.pop(); // grab the previous state
+
+    // Push the current state into the forward stack
+    const currentNavState = {
+      activeTab,
+      selectedCategory,
+      selectedProviderId: selectedProvider?.id || null,
+      chattingWithProviderId: chattingWithProvider?.id || null,
+      portalViewMode,
+    };
+    setNavigationForward((oldForward) => [currentNavState, ...oldForward]);
+    setNavigationHistory(historyCopy);
+
+    // Apply the exact backwards configuration
+    if (targetState) {
+      setActiveTab(targetState.activeTab);
+      setSelectedCategory(targetState.selectedCategory);
+      setPortalViewMode(targetState.portalViewMode);
+
+      if (targetState.selectedProviderId) {
+        const found = providers.find(p => p.id === targetState.selectedProviderId);
+        setSelectedProvider(found || null);
+      } else {
+        setSelectedProvider(null);
+      }
+
+      if (targetState.chattingWithProviderId) {
+        const found = providers.find(p => p.id === targetState.chattingWithProviderId);
+        setChattingWithProvider(found || null);
+      } else {
+        setChattingWithProvider(null);
+      }
+
+      prevNavStateRef.current = targetState;
+    }
+
+    setTimeout(() => {
+      setIsNavigatingHistory(false);
+    }, 80);
+  };
+
+  const handleGoForward = () => {
+    if (navigationForward.length === 0) return;
+
+    setIsNavigatingHistory(true);
+    const forwardCopy = [...navigationForward];
+    const targetState = forwardCopy.shift(); // grab the next state
+
+    // Push the current state to the history stack
+    const currentNavState = {
+      activeTab,
+      selectedCategory,
+      selectedProviderId: selectedProvider?.id || null,
+      chattingWithProviderId: chattingWithProvider?.id || null,
+      portalViewMode,
+    };
+    setNavigationHistory((oldHistory) => [...oldHistory, currentNavState]);
+    setNavigationForward(forwardCopy);
+
+    // Apply forward state
+    if (targetState) {
+      setActiveTab(targetState.activeTab);
+      setSelectedCategory(targetState.selectedCategory);
+      setPortalViewMode(targetState.portalViewMode);
+
+      if (targetState.selectedProviderId) {
+        const found = providers.find(p => p.id === targetState.selectedProviderId);
+        setSelectedProvider(found || null);
+      } else {
+        setSelectedProvider(null);
+      }
+
+      if (targetState.chattingWithProviderId) {
+        const found = providers.find(p => p.id === targetState.chattingWithProviderId);
+        setChattingWithProvider(found || null);
+      } else {
+        setChattingWithProvider(null);
+      }
+
+      prevNavStateRef.current = targetState;
+    }
+
+    setTimeout(() => {
+      setIsNavigatingHistory(false);
+    }, 80);
+  };
+
+  // Admin Revenue Metrics Persistence
+  const [adminRevenue, setAdminRevenue] = useState<{ bookingFees: number; providerFees: number; clientFees: number }>({
+    bookingFees: 0,
+    providerFees: 0,
+    clientFees: 0
+  });
+
+  const updateAdminRevenue = (key: 'bookingFees' | 'providerFees' | 'clientFees', amount: number) => {
+    setAdminRevenue(prev => {
+      const updated = { ...prev, [key]: Number((prev[key] + amount).toFixed(2)) };
+      localStorage.setItem('sugardaddy_admin_revenue', JSON.stringify(updated));
+      return updated;
+    });
+  };
 
   // Initial Bookings load (one mock booking for visual interest)
   const [bookings, setBookings] = useState<Booking[]>([
@@ -124,6 +294,178 @@ export default function App() {
     }
   ]);
 
+  // Listen for firebase auth state changes
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, async (fUser) => {
+      if (fUser) {
+        setIsAuthenticated(true);
+        const cachedUsers = localStorage.getItem('sugardaddy_user');
+        if (cachedUsers) {
+          try {
+            const parsed = JSON.parse(cachedUsers);
+            if (parsed.id === fUser.uid) {
+              setCurrentUser(parsed);
+              return;
+            }
+          } catch (e) {}
+        }
+        
+        const fallbackUser: UserState = {
+          id: fUser.uid,
+          name: fUser.displayName || fUser.email?.split('@')[0] || 'Luxe Member',
+          email: fUser.email || '',
+          role: 'customer',
+          walletBalance: 0,
+          savedProviderIds: [],
+          verification: {
+            governmentId: 'verified',
+            selfie: 'verified',
+            phone: 'verified',
+            email: 'verified',
+          },
+          blockedUserIds: [],
+          hasCompletedClientProfile: false,
+          hasCompletedProviderProfile: false,
+          providerSubscriptionActive: false,
+          isClientPremium: false
+        };
+        setCurrentUser(fallbackUser);
+        localStorage.setItem('sugardaddy_user', JSON.stringify(fallbackUser));
+      } else {
+        setIsAuthenticated(false);
+      }
+    });
+    return () => unsubscribe();
+  }, []);
+
+  const handleAuthSuccess = async (firebaseUser: any, name: string, preferredRole: Role, token?: string) => {
+    if (token && token.length > 50) {
+      setGoogleAccessToken(token);
+    }
+
+    const updatedUser: UserState = {
+      id: firebaseUser.uid,
+      name: name || firebaseUser.displayName || firebaseUser.email?.split('@')[0] || 'Luxe Member',
+      email: firebaseUser.email || '',
+      role: preferredRole || 'customer',
+      walletBalance: 0,
+      savedProviderIds: [],
+      verification: {
+        governmentId: 'verified',
+        selfie: 'verified',
+        phone: 'verified',
+        email: 'verified',
+      },
+      blockedUserIds: [],
+      hasCompletedClientProfile: false,
+      hasCompletedProviderProfile: false,
+      providerSubscriptionActive: false,
+      isClientPremium: false
+    };
+
+    setCurrentUser(updatedUser);
+    setIsAuthenticated(true);
+    localStorage.setItem('sugardaddy_user', JSON.stringify(updatedUser));
+
+    // Async synchronization with Postgres SQL on Cloud SQL
+    try {
+      await fetch('/api/auth/sync', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          uid: firebaseUser.uid,
+          email: firebaseUser.email,
+          name: updatedUser.name,
+          role: updatedUser.role,
+          walletBalance: updatedUser.walletBalance
+        })
+      });
+      triggerNotification(`Established secure premium connection for ${updatedUser.name}`);
+    } catch (err) {
+      console.error('Backend database sync failed:', err);
+    }
+  };
+
+  const handleLogout = async () => {
+    try {
+      await auth.signOut();
+      setGoogleAccessToken(null);
+      setIsAuthenticated(false);
+      triggerNotification('Successfully disconnected from Luxe Hub.');
+    } catch (err) {
+      console.error('Logout error:', err);
+    }
+  };
+
+  const handleCompleteOnboarding = (updatedUser: UserState, newProvider?: ServiceProvider) => {
+    setCurrentUser(updatedUser);
+    
+    let updatedProviders = [...providers];
+    if (newProvider) {
+      // Ensure we overwrite or insert the new provider profile card safely
+      updatedProviders = [newProvider, ...providers.filter(p => p.id !== newProvider.id)];
+      setProviders(updatedProviders);
+    }
+    
+    saveToLocalStorage(updatedUser, bookings, updatedProviders, categories);
+    
+    triggerNotification(
+      updatedUser.role === 'provider' 
+        ? 'Congratulations! Your elite professional listing is now active.' 
+        : `Welcome! Your client session has been initialized under ${updatedUser.isClientPremium ? 'Elite Premium' : 'Free'} status.`
+    );
+  };
+
+  const triggerPortalSwitch = (target: 'client' | 'provider') => {
+    if (isTransitioning) return;
+    
+    setIsTransitioning(true);
+    setTransitionTarget(target);
+    
+    const messagesList = [
+      'Synchronizing security structures...',
+      'Opening end-to-end connection keys...',
+      'Reconfiguring visual dashboards...',
+      'Loading cryptographic parameters...'
+    ];
+    setTransitionMessage(messagesList[0]);
+    
+    setTimeout(() => setTransitionMessage(messagesList[1]), 400);
+    setTimeout(() => setTransitionMessage(messagesList[2]), 800);
+    setTimeout(() => setTransitionMessage(messagesList[3]), 1200);
+
+    setTimeout(() => {
+      setPortalViewMode(target);
+      // Clean active Tab to prevent cross-view bypasses entirely
+      setActiveTab(target === 'client' ? 'browse' : 'dashboard');
+      setIsTransitioning(false);
+      setTransitionTarget(null);
+      triggerNotification(`Successfully entered ${target === 'client' ? 'Elite Client Portal' : 'Service Provider Portal'}.`);
+    }, 1600);
+  };
+
+  const triggerGoogleSignupPopup = async () => {
+    try {
+      googleAuthProvider.addScope('https://www.googleapis.com/auth/drive.file');
+      googleAuthProvider.addScope('https://www.googleapis.com/auth/calendar.events');
+      googleAuthProvider.addScope('https://www.googleapis.com/auth/forms.body');
+      googleAuthProvider.addScope('https://www.googleapis.com/auth/contacts');
+
+      const result = await signInWithPopup(auth, googleAuthProvider);
+      const credential = (result as any)._credentials || {};
+      const token = (result as any).accessToken || credential.accessToken;
+      if (token) {
+        setGoogleAccessToken(token);
+        triggerNotification('Connected Google Workspace session successfully!');
+      }
+    } catch (err) {
+      console.error('Google Workspace connect error:', err);
+      triggerNotification('Google connect completed.');
+    }
+  };
+
   // Sync state with localstorage & auto-detect closest city
   useEffect(() => {
     const cachedUsers = localStorage.getItem('sugardaddy_user');
@@ -131,11 +473,35 @@ export default function App() {
     const cachedProviders = localStorage.getItem('sugardaddy_providers');
     const cachedCategories = localStorage.getItem('sugardaddy_categories');
     const cachedCity = localStorage.getItem('sugardaddy_city');
+    const cachedRevenue = localStorage.getItem('sugardaddy_admin_revenue');
     
-    if (cachedUsers) setCurrentUser(JSON.parse(cachedUsers));
+    if (cachedUsers) {
+      try {
+        setCurrentUser(JSON.parse(cachedUsers));
+      } catch (err) {}
+    }
     if (cachedBookings) setBookings(JSON.parse(cachedBookings));
     if (cachedProviders) setProviders(JSON.parse(cachedProviders));
     if (cachedCategories) setCategories(JSON.parse(cachedCategories));
+
+    const cachedMessages = localStorage.getItem('sugardaddy_messages');
+    if (cachedMessages) {
+      try {
+        const parsedMsgs: Message[] = JSON.parse(cachedMessages);
+        const thirtyDaysAgo = Date.now() - 30 * 24 * 60 * 60 * 1000;
+        const freshMsgs = parsedMsgs.filter(m => {
+          const createdTime = m.createdAt ? new Date(m.createdAt).getTime() : Date.now();
+          return createdTime >= thirtyDaysAgo;
+        });
+        setMessages(freshMsgs);
+      } catch (err) {}
+    }
+    
+    if (cachedRevenue) {
+      try {
+        setAdminRevenue(JSON.parse(cachedRevenue));
+      } catch (err) {}
+    }
     
     if (cachedCity) {
       setUserCity(cachedCity as any);
@@ -179,7 +545,14 @@ export default function App() {
   const handleUpdateCurrentUser = (updated: UserState) => {
     setCurrentUser(updated);
     saveToLocalStorage(updated, bookings, providers, categories);
+    // sync wallet update to postgres
+    fetch('/api/wallet/update', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ uid: updated.id, balance: updated.walletBalance })
+    }).catch(err => console.error(err));
   };
+
 
   // Update Provider custom listing portfolios
   const handleUpdateProviderListing = (updatedListing: Partial<ServiceProvider>) => {
@@ -238,6 +611,71 @@ export default function App() {
     setProviders(updatedProviders);
     saveToLocalStorage(updatedUser, updatedBookings, updatedProviders, categories);
     triggerNotification('Booking Escrow Deposit secured successfully.');
+  };
+
+  const handleUnlockProviderContact = (providerId: string) => {
+    if (!currentUser.isClientPremium) return;
+    const unlockedIds = currentUser.unlockedProviderContactIds || [];
+    const countThisMonth = currentUser.unlockedCountThisMonth || 0;
+    if (unlockedIds.includes(providerId)) return;
+    if (countThisMonth >= 3) {
+      triggerNotification('Monthly contact unlock limit of 3 reached.');
+      return;
+    }
+    const updatedUser = {
+      ...currentUser,
+      unlockedProviderContactIds: [...unlockedIds, providerId],
+      unlockedCountThisMonth: countThisMonth + 1,
+    };
+    setCurrentUser(updatedUser);
+    saveToLocalStorage(updatedUser, bookings, providers, categories);
+    triggerNotification('Provider contact unlocked successfully!');
+  };
+
+  const handleUpgradeToPremium = () => {
+    if (currentUser.isClientPremium) {
+      triggerNotification('You are already an elite premium member!');
+      return;
+    }
+    if (currentUser.walletBalance < 25) {
+      triggerNotification('Insufficient balance ($25 needed). Please deposit inside your Escrow Wallet.');
+      return;
+    }
+
+    const updatedUser = {
+      ...currentUser,
+      walletBalance: Number((currentUser.walletBalance - 25).toFixed(2)),
+      isClientPremium: true,
+      clientSubscribedAt: new Date().toISOString(),
+      unlockedProviderContactIds: [],
+      unlockedCountThisMonth: 0,
+      lastUnlockResetDate: new Date().toISOString().slice(0, 7), // "2026-06"
+    };
+    setCurrentUser(updatedUser);
+    updateAdminRevenue('clientFees', 25);
+    saveToLocalStorage(updatedUser, bookings, providers, categories);
+    triggerNotification('Welcome to Premium! Daily limits boosted to 20 messages + 3 unlocks.');
+  };
+
+  const handleProviderSubscribe = () => {
+    if (currentUser.providerSubscriptionActive) {
+      triggerNotification('Your provider subscription is already active.');
+      return;
+    }
+    if (currentUser.walletBalance < 25) {
+      triggerNotification('Insufficient balance ($25 needed). Please deposit inside your Escrow Wallet.');
+      return;
+    }
+    const updatedUser = {
+      ...currentUser,
+      walletBalance: Number((currentUser.walletBalance - 25).toFixed(2)),
+      providerSubscriptionActive: true,
+      providerSubscriptionPaidUntil: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10), // paid for 30 days
+    };
+    setCurrentUser(updatedUser);
+    updateAdminRevenue('providerFees', 25);
+    saveToLocalStorage(updatedUser, bookings, providers, categories);
+    triggerNotification('Success! Provider premium features unlocked for 30 days.');
   };
 
   // Support booking updates (such as questionnaire answering or client individual scoring revisions)
@@ -437,8 +875,13 @@ export default function App() {
 
   // Chat messaging list sending helper
   const handleSendInstantMessage = (msg: Message) => {
-    const updated = [...messages, msg];
+    const enrichedMsg: Message = {
+      ...msg,
+      createdAt: new Date().toISOString()
+    };
+    const updated = [...messages, enrichedMsg];
     setMessages(updated);
+    localStorage.setItem('sugardaddy_messages', JSON.stringify(updated));
   };
 
   // User list block toggler helper
@@ -485,11 +928,86 @@ export default function App() {
   });
 
   // Calculate my active provider custom listing
-  const myListingProfile = providers.find(p => p.id === 'provider_custom');
+  const myListingProfile = providers.find(p => p.id === currentUser.id);
+
+  if (!isAuthenticated) {
+    return (
+      <div className="min-h-screen bg-zinc-950 text-wrap select-none">
+        {/* Dynamic Push Notification Overlay alerts */}
+        <div className="fixed bottom-4 right-4 z-50 space-y-2 pointer-events-none max-w-sm w-full">
+          {notifications.map((notif, idx) => (
+            <div key={idx} className="bg-zinc-900 border border-zinc-800 p-4 rounded-xl shadow-2xl flex items-start gap-2.5 animate-slide-in backdrop-blur-md">
+              <ShieldCheck className="w-5 h-5 text-amber-500 shrink-0" />
+              <p className="text-xs text-white font-medium font-sans leading-snug">{notif}</p>
+            </div>
+          ))}
+        </div>
+        <AuthPortal onAuthSuccess={handleAuthSuccess} />
+      </div>
+    );
+  }
+
+  const needsOnboarding = currentUser && (
+    (currentUser.role === 'provider' && (!currentUser.hasCompletedProviderProfile || !currentUser.providerSubscriptionActive)) ||
+    (currentUser.role === 'customer' && !currentUser.hasCompletedClientProfile)
+  );
+
+  if (needsOnboarding) {
+    return (
+      <div className="min-h-screen bg-zinc-950 select-none">
+        <div className="fixed bottom-4 right-4 z-55 space-y-2 pointer-events-none max-w-sm w-full">
+          {notifications.map((notif, idx) => (
+            <div key={idx} className="bg-[#1c1a18] border border-zinc-800 p-4 rounded-xl shadow-2xl flex items-start gap-2.5 animate-slide-in backdrop-blur-md">
+              <ShieldCheck className="w-5 h-5 text-amber-500 shrink-0" />
+              <p className="text-xs text-white font-medium font-sans leading-snug">{notif}</p>
+            </div>
+          ))}
+        </div>
+        <OnboardingWizard 
+          currentUser={currentUser} 
+          categories={categories} 
+          onCompleteOnboarding={handleCompleteOnboarding} 
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-background freckled-bg text-on-background flex flex-col font-sans selection:bg-primary selection:text-on-primary">
       
+      {/* Cinematic Portal Transition Screen Overlay */}
+      {isTransitioning && (
+        <div className="fixed inset-0 bg-zinc-950/95 backdrop-blur-md z-[9999] flex flex-col items-center justify-center p-6 text-center select-none animate-fade-in animate-duration-300">
+          <div className="relative max-w-sm space-y-6">
+            
+            {/* Decorative Rotating Gold Orbs */}
+            <div className="relative flex items-center justify-center">
+              <div className="w-16 h-16 rounded-full border border-amber-500/20 animate-ping absolute" />
+              <div className="w-12 h-12 rounded-full border-2 border-amber-500 border-t-transparent animate-spin" />
+              <Sparkles className="w-5 h-5 text-amber-500 absolute animate-pulse" />
+            </div>
+
+            <div className="space-y-2">
+              <h3 className="text-sm font-bold text-white font-serif uppercase tracking-widest text-amber-500">
+                Swapping Portal Framework Mode
+              </h3>
+              <p className="text-neutral-400 text-xs font-mono tracking-tight">
+                {transitionTarget === 'client' ? 'COMPILED PORTAL CLIENT VIEW...' : 'AUTHENTICATING ENCRYPTED WORKSPACE...'}
+              </p>
+            </div>
+
+            <div className="pt-2">
+              <div className="bg-[#151311] border border-zinc-800 rounded-lg p-3 text-left">
+                <p className="text-[10px] text-zinc-500 font-mono tracking-tight leading-normal h-8 flex items-center">
+                  ⚡ {transitionMessage}
+                </p>
+              </div>
+            </div>
+
+          </div>
+        </div>
+      )}
+
       {/* Dynamic Push Notification Overlay alerts */}
       <div className="fixed bottom-4 right-4 z-50 space-y-2 pointer-events-none max-w-sm w-full">
         {notifications.map((notif, idx) => (
@@ -514,52 +1032,35 @@ export default function App() {
           </div>
 
           {/* Center Swapper Roles selector (The gold premium control!) */}
-          <div className="flex items-center bg-surface p-1 rounded-xl border border-outline-variant">
-            <button 
-              onClick={() => {
-                const updated = { ...currentUser, role: 'customer' as Role };
-                setCurrentUser(updated);
-                saveToLocalStorage(updated, bookings, providers, categories);
-                triggerNotification('Switched to Client Dashboard');
-              }}
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all font-mono uppercase ${
-                currentUser.role === 'customer' 
-                  ? 'bg-primary text-on-primary shadow-md shadow-primary/10' 
-                  : 'text-[#d6c3b4] hover:text-white'
-              }`}
-            >
-              Client (Buyer)
-            </button>
-            <button 
-              onClick={() => {
-                const updated = { ...currentUser, role: 'provider' as Role };
-                setCurrentUser(updated);
-                saveToLocalStorage(updated, bookings, providers, categories);
-                triggerNotification('Switched to Provider Dashboard');
-              }}
-              className={`px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all font-mono uppercase ${
-                currentUser.role === 'provider' 
-                  ? 'bg-primary text-on-primary shadow-md shadow-primary/10' 
-                  : 'text-[#d6c3b4] hover:text-white'
-              }`}
-            >
-              Provider (Creator)
-            </button>
-            <button 
-              onClick={() => {
-                const updated = { ...currentUser, role: 'admin' as Role };
-                setCurrentUser(updated);
-                saveToLocalStorage(updated, bookings, providers, categories);
-                triggerNotification('Switched to System Administration Panel');
-              }}
-              className={`px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all font-mono uppercase ${
-                currentUser.role === 'admin' 
-                  ? 'bg-primary text-on-primary shadow-md shadow-primary/10' 
-                  : 'text-[#d6c3b4] hover:text-white'
-              }`}
-            >
-              Platform Admin
-            </button>
+          <div className="flex items-center bg-surface p-1 rounded-xl border border-outline-variant gap-1">
+            {portalViewMode === 'client' ? (
+              <button 
+                onClick={() => {
+                  if (currentUser.isClientPremium || currentUser.role === 'provider') {
+                    triggerPortalSwitch('provider');
+                  }
+                }}
+                disabled={!currentUser.isClientPremium && currentUser.role !== 'provider'}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all font-mono uppercase flex items-center gap-1.5 ${
+                  (currentUser.isClientPremium || currentUser.role === 'provider')
+                    ? 'bg-amber-500 text-zinc-950 font-extrabold cursor-pointer hover:scale-102 active:scale-98 shadow-lg shadow-amber-500/10'
+                    : 'bg-zinc-800/20 border border-zinc-850 text-neutral-600 cursor-not-allowed opacity-50'
+                }`}
+                title={(!currentUser.isClientPremium && currentUser.role !== 'provider') ? 'Greyed out: Requires VIP Premium account level to switch sides' : 'Switch over to Provider Portal'}
+              >
+                <Sparkles className="w-3.5 h-3.5" />
+                <span>Switch to Provider Portal 👑</span>
+              </button>
+            ) : (
+              <button 
+                onClick={() => triggerPortalSwitch('client')}
+                className="px-3 py-1.5 bg-neutral-900 border border-zinc-800 text-amber-500 hover:text-white rounded-lg text-xs font-bold transition-all font-mono uppercase flex items-center gap-1.5 cursor-pointer hover:scale-102 active:scale-98 shadow"
+                title="Switch over to Client Portal"
+              >
+                <Users className="w-3.5 h-3.5" />
+                <span>Switch to Client Portal 👥</span>
+              </button>
+            )}
           </div>
 
           {/* Quick Stats Dashboard shortcut */}
@@ -601,12 +1102,32 @@ export default function App() {
                 <option value="Miami">MIAMI</option>
                 <option value="London">LONDON</option>
                 <option value="Paris">PARIS</option>
+                <option value="Denver">DENVER</option>
+                <option value="San Francisco">SAN FRANCISCO</option>
+                <option value="San Diego">SAN DIEGO</option>
+                <option value="Dallas">DALLAS</option>
+                <option value="Chicago">CHICAGO</option>
+                <option value="Philadelphia">PHILADELPHIA</option>
+                <option value="Las Vegas">LAS VEGAS</option>
+                <option value="Seattle">SEATTLE</option>
+                <option value="Portland">PORTLAND</option>
+                <option value="Washington DC">WASHINGTON DC</option>
+                <option value="Puerto Rico">PUERTO RICO</option>
+                <option value="Boston">BOSTON</option>
+                <option value="Austin">AUSTIN</option>
+                <option value="Phoenix">PHOENIX</option>
+                <option value="Atlanta">ATLANTA</option>
+                <option value="Nashville">NASHVILLE</option>
+                <option value="Detroit">DETROIT</option>
+                <option value="Barcelona">BARCELONA</option>
+                <option value="Pittsburgh">PITTSBURGH</option>
+                <option value="Cincinnati">CINCINNATI</option>
               </select>
             </div>
 
             <div 
               onClick={() => setActiveTab('dashboard')}
-              className="flex items-center gap-2 bg-surface border border-outline-variant px-3 py-1.5 rounded-xl cursor-pointer hover:border-outline transition-colors"
+              className="flex items-center gap-2 bg-surface border border-outline-variant px-3 py-1.5 rounded-xl cursor-pointer hover:border-outline transition-colors animate-fade-in"
             >
               <Users className="w-4 h-4 text-primary" />
               <div>
@@ -614,6 +1135,15 @@ export default function App() {
                 <span className="text-xs font-bold text-primary font-mono">${currentUser.walletBalance}</span>
               </div>
             </div>
+
+            <button
+              onClick={handleLogout}
+              className="flex items-center gap-2 bg-[#1c1c1e] hover:bg-zinc-800 border border-zinc-805 px-3 py-1.5 rounded-xl cursor-pointer text-xs text-[#d6c3b4] hover:text-white transition-colors"
+              title="Sign Out of Luxe Hub Session"
+            >
+              <Power className="w-4 h-4 text-red-500 hover:scale-110 transition-transform" />
+              <span className="font-mono tracking-widest text-[10px] uppercase font-bold">Disconnect</span>
+            </button>
           </div>
 
         </div>
@@ -623,42 +1153,125 @@ export default function App() {
       <main className="flex-grow max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
         
         {/* Navigation Tab selection list */}
-        <div className="flex items-center gap-4 border-b border-outline-variant pb-2">
-          <button
-            onClick={() => setActiveTab('browse')}
-            className={`px-4 py-2 text-xs uppercase font-extrabold tracking-widest font-mono transition-all ${
-              activeTab === 'browse' ? 'text-primary border-b-2 border-primary' : 'text-[#d6c3b4] hover:text-white'
-            }`}
-          >
-            ✈ Discover Services
-          </button>
+        <div className="flex items-center gap-4 border-b border-outline-variant pb-2 overflow-x-auto select-none no-scrollbar">
+          
+          {/* Elite In-App Back/Forward browser-like controls */}
+          <div className="flex items-center gap-1.5 bg-[#171513] border border-outline-variant p-1 rounded-xl shrink-0 mr-2 shadow-inner">
+            <button
+              onClick={handleGoBack}
+              disabled={navigationHistory.length === 0}
+              className={`p-1.5 rounded-lg transition-all flex items-center justify-center ${
+                navigationHistory.length > 0 
+                  ? 'text-primary bg-primary/5 hover:bg-primary/20 cursor-pointer hover:scale-105 active:scale-95' 
+                  : 'text-neutral-700 opacity-25 cursor-not-allowed'
+              }`}
+              title="Go Back In-App 📁"
+            >
+              <ArrowLeft className="w-3.5 h-3.5" />
+            </button>
+            <span className="text-[9px] font-mono font-bold text-neutral-500 uppercase tracking-tight select-none">In-App Navigate</span>
+            <button
+              onClick={handleGoForward}
+              disabled={navigationForward.length === 0}
+              className={`p-1.5 rounded-lg transition-all flex items-center justify-center ${
+                navigationForward.length > 0 
+                  ? 'text-primary bg-primary/5 hover:bg-primary/20 cursor-pointer hover:scale-105 active:scale-95' 
+                  : 'text-neutral-700 opacity-25 cursor-not-allowed'
+              }`}
+              title="Go Forward In-App 📁"
+            >
+              <ArrowRight className="w-3.5 h-3.5" />
+            </button>
+          </div>
 
-          <button
-            onClick={() => setActiveTab('dashboard')}
-            className={`px-4 py-2 text-xs uppercase font-extrabold tracking-widest font-mono transition-all ${
-              activeTab === 'dashboard' ? 'text-primary border-b-2 border-primary' : 'text-[#d6c3b4] hover:text-white'
-            }`}
-          >
-            📋 {currentUser.role === 'customer' ? 'Client Workspace' : currentUser.role === 'provider' ? 'Provider Dashboard' : 'Disputes Board'}
-          </button>
+          {portalViewMode === 'client' ? (
+            <>
+              <button
+                onClick={() => setActiveTab('browse')}
+                className={`px-4 py-2 text-xs uppercase font-extrabold tracking-widest font-mono transition-all shrink-0 ${
+                  activeTab === 'browse' ? 'text-primary border-b-2 border-primary w-fit' : 'text-[#d6c3b4] hover:text-white'
+                }`}
+              >
+                ✈ Discover Services
+              </button>
 
-          <button
-            onClick={() => setActiveTab('verification')}
-            className={`px-4 py-2 text-xs uppercase font-extrabold tracking-widest font-mono transition-all ${
-              activeTab === 'verification' ? 'text-primary border-b-2 border-primary' : 'text-[#d6c3b4] hover:text-white'
-            }`}
-          >
-            🛡️ Verification Center
-          </button>
+              <button
+                onClick={() => setActiveTab('dashboard')}
+                className={`px-4 py-2 text-xs uppercase font-extrabold tracking-widest font-mono transition-all shrink-0 ${
+                  activeTab === 'dashboard' ? 'text-primary border-b-2 border-primary w-fit' : 'text-[#d6c3b4] hover:text-white'
+                }`}
+              >
+                📋 Client Workspace
+              </button>
 
-          <button
-            onClick={() => setActiveTab('export')}
-            className={`px-4 py-2 text-xs uppercase font-extrabold tracking-widest font-mono transition-all ${
-              activeTab === 'export' ? 'text-primary border-b-2 border-primary' : 'text-[#d6c3b4] hover:text-white'
-            }`}
-          >
-            💾 Backup Logs
-          </button>
+              <button
+                onClick={() => setActiveTab('verification')}
+                className={`px-4 py-2 text-xs uppercase font-extrabold tracking-widest font-mono transition-all shrink-0 ${
+                  activeTab === 'verification' ? 'text-primary border-b-2 border-primary w-fit' : 'text-[#d6c3b4] hover:text-white'
+                }`}
+              >
+                🛡️ Verification Center
+              </button>
+
+              <button
+                onClick={() => setActiveTab('export')}
+                className={`px-4 py-2 text-xs uppercase font-extrabold tracking-widest font-mono transition-all shrink-0 ${
+                  activeTab === 'export' ? 'text-primary border-b-2 border-primary w-fit' : 'text-[#d6c3b4] hover:text-white'
+                }`}
+              >
+                💾 Backup Logs
+              </button>
+            </>
+          ) : (
+            <>
+              <button
+                onClick={() => setActiveTab('dashboard')}
+                className={`px-4 py-2 text-xs uppercase font-extrabold tracking-widest font-mono transition-all shrink-0 ${
+                  activeTab === 'dashboard' ? 'text-primary border-b-2 border-primary w-fit' : 'text-[#d6c3b4] hover:text-white'
+                }`}
+              >
+                📋 Provider Dashboard
+              </button>
+
+              <button
+                onClick={() => setActiveTab('workspace')}
+                className={`px-4 py-2 text-xs uppercase font-extrabold tracking-widest font-mono transition-all shrink-0 ${
+                  activeTab === 'workspace' ? 'text-primary border-b-2 border-primary w-fit' : 'text-[#d6c3b4] hover:text-white'
+                }`}
+              >
+                💼 Workspace Sync
+              </button>
+
+              <button
+                onClick={() => setActiveTab('verification')}
+                className={`px-4 py-2 text-xs uppercase font-extrabold tracking-widest font-mono transition-all shrink-0 ${
+                  activeTab === 'verification' ? 'text-primary border-b-2 border-primary w-fit' : 'text-[#d6c3b4] hover:text-white'
+                }`}
+              >
+                🛡️ Verification Status
+              </button>
+
+              <button
+                onClick={() => setActiveTab('export')}
+                className={`px-4 py-2 text-xs uppercase font-extrabold tracking-widest font-mono transition-all shrink-0 ${
+                  activeTab === 'export' ? 'text-primary border-b-2 border-primary w-fit' : 'text-[#d6c3b4] hover:text-white'
+                }`}
+              >
+                💾 Backup Logs
+              </button>
+            </>
+          )}
+
+          {currentUser.role === 'admin' && (
+            <button
+              onClick={() => setActiveTab('admin')}
+              className={`px-4 py-2 text-xs uppercase font-extrabold tracking-widest font-mono transition-all shrink-0 ${
+                activeTab === 'admin' ? 'text-primary border-b-2 border-primary w-fit' : 'text-[#d6c3b4] hover:text-white'
+              }`}
+            >
+              🛡️ Admin Control
+            </button>
+          )}
         </div>
 
         {/* Tab 1: Discovery Marketplace */}
@@ -887,6 +1500,9 @@ export default function App() {
                           setChattingWithProvider(prov);
                           setActiveTab('dashboard'); // take to message console instant
                         }}
+                        currentUser={currentUser}
+                        onUnlockContact={handleUnlockProviderContact}
+                        onUpgradePremium={handleUpgradeToPremium}
                       />
                     ))}
                   </div>
@@ -910,56 +1526,109 @@ export default function App() {
                 
                 {/* Active contact lists */}
                 <div className="space-y-1.5">
-                  <div 
-                    onClick={() => setChattingWithProvider(providers[0])}
-                    className={`p-2.5 rounded-xl border flex items-center justify-between cursor-pointer transition-all ${
-                      chattingWithProvider?.id === providers[0].id
-                        ? 'bg-primary/5 border-primary/40'
-                        : 'border-outline-variant hover:border-outline bg-[#100e0c]/40'
-                    }`}
-                  >
-                    <div className="flex items-center gap-2.5">
-                      <img src={providers[0].avatarUrl} alt={providers[0].name} className="w-8 h-8 rounded-full object-cover border border-outline-variant" />
-                      <div>
-                        <h4 className="text-white font-bold text-xs">{providers[0].name}</h4>
-                        <p className="text-[10px] text-neutral-400 font-mono tracking-tight truncate max-w-[120px]">Good afternoon Marcus...</p>
-                      </div>
-                    </div>
-                    <span className="text-[9px] text-[#9e8e80] font-mono">1:14 PM</span>
-                  </div>
+                  {(() => {
+                    const chatPartners = portalViewMode === 'client' 
+                      ? providers 
+                      : Array.from(new Set(
+                          messages
+                            .filter(m => m.chatId.includes(currentUser.id) && m.senderId !== currentUser.id)
+                            .map(m => m.senderId)
+                        )).map(uid => {
+                          const userMsgs = messages.filter(m => m.senderId === uid || m.chatId.includes(uid));
+                          const lastM = userMsgs[userMsgs.length - 1];
+                          const cName = lastM ? lastM.senderName : 'VIP Client User';
+                          return {
+                            id: uid,
+                            name: cName,
+                            title: 'Verified Client Member',
+                            avatarUrl: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&q=80&w=200',
+                            bio: 'Private client portfolio consult.',
+                            rating: 5.0,
+                            reviewsCount: 1,
+                            completionRate: 100,
+                            responseTime: '12 mins',
+                            repeatCustomerRate: 100,
+                            categories: [],
+                            pricePerEvent: 0,
+                            priceUnit: 'hour',
+                            distanceMiles: 0,
+                            locationName: 'Encrypted Routing',
+                            isFeatured: false,
+                            verification: { governmentId: 'verified', selfie: 'verified', phone: 'verified', email: 'verified' },
+                            reviews: [],
+                            verifiedBadge: true,
+                            availabilityCalendar: []
+                          } as any;
+                        });
 
-                  {providers[1] && (
-                    <div 
-                      onClick={() => setChattingWithProvider(providers[1])}
-                      className={`p-2.5 rounded-xl border flex items-center justify-between cursor-pointer transition-all ${
-                        chattingWithProvider?.id === providers[1].id
-                          ? 'bg-primary/5 border-primary/40'
-                          : 'border-outline-variant hover:border-outline bg-[#100e0c]/40'
-                      }`}
-                    >
-                      <div className="flex items-center gap-2.5">
-                        <img src={providers[1].avatarUrl} alt={providers[1].name} className="w-8 h-8 rounded-full object-cover border border-outline-variant" />
-                        <div>
-                          <h4 className="text-white font-bold text-xs">{providers[1].name}</h4>
-                          <p className="text-[10px] text-neutral-400 font-mono tracking-tight truncate max-w-[120px]">Let&apos;s finalize the...</p>
+                    if (chatPartners.length === 0) {
+                      return (
+                        <div className="p-4 border border-zinc-800 bg-[#141210]/30 rounded-xl text-center text-xs text-neutral-500">
+                          <p className="font-mono uppercase text-[10px] tracking-wider text-amber-500/80 font-bold mb-1">No Active Chat Connections</p>
+                          <p className="text-[10px] text-zinc-500 leading-normal">
+                            {portalViewMode === 'client' 
+                              ? 'Tap "Discover Services" above to select an elite professional provider card and launch an encrypted chat channel.' 
+                              : 'Incoming Client consulting sessions will appear here dynamically as they occur.'}
+                          </p>
                         </div>
-                      </div>
-                      <span className="text-[9px] text-[#9e8e80] font-mono">Yesterday</span>
-                    </div>
-                  )}
+                      );
+                    }
 
+                    return chatPartners.map(p => {
+                      const userMsgs = messages.filter(m => 
+                        (m.chatId === `${p.id}_${currentUser.id}`) || 
+                        (m.chatId === `${currentUser.id}_${p.id}`)
+                      );
+                      const lastMsg = userMsgs[userMsgs.length - 1];
+                      const isSelected = chattingWithProvider?.id === p.id;
+                      return (
+                        <div 
+                          key={p.id}
+                          onClick={() => setChattingWithProvider(p)}
+                          className={`p-2.5 rounded-xl border flex items-center justify-between cursor-pointer transition-all ${
+                            isSelected
+                              ? 'bg-primary/5 border-primary/40'
+                              : 'border-outline-variant hover:border-outline bg-[#100e0c]/40'
+                          }`}
+                        >
+                          <div className="flex items-center gap-2.5 min-w-0">
+                            {p.avatarUrl ? (
+                              <img src={p.avatarUrl} alt={p.name} className="w-8 h-8 rounded-full object-cover border border-outline-variant shrink-0" />
+                            ) : (
+                              <div className="w-8 h-8 rounded-full bg-zinc-805 text-white flex items-center justify-center text-xs font-bold font-mono shrink-0">
+                                {p.name[0]}
+                              </div>
+                            )}
+                            <div className="text-left min-w-0">
+                              <h4 className="text-white font-bold text-xs truncate">{p.name}</h4>
+                              <p className="text-[10px] text-neutral-400 font-mono tracking-tight truncate max-w-[130px]">
+                                {lastMsg ? lastMsg.text : `${p.title}`}
+                              </p>
+                            </div>
+                          </div>
+                          <span className="text-[9px] text-[#9e8e80] font-mono shrink-0">
+                            {lastMsg ? lastMsg.timestamp : 'Active'}
+                          </span>
+                        </div>
+                      );
+                    });
+                  })()}
                 </div>
               </div>
-
+ 
               {/* Chat section viewport if target exists */}
               {chattingWithProvider && (
                 <ChatSection
                   currentUser={currentUser}
                   provider={chattingWithProvider}
                   onSendMessage={handleSendInstantMessage}
-                  chatMessages={messages.filter(m => m.chatId === `${chattingWithProvider.id}_${currentUser.id}` || m.chatId === `prov_1_cust_99` /* mock hack */)}
+                  chatMessages={messages.filter(m => 
+                    m.chatId === `${chattingWithProvider.id}_${currentUser.id}` || 
+                    m.chatId === `${currentUser.id}_${chattingWithProvider.id}`
+                  )}
                   onBlockUser={handleBlockToggleUser}
                   isUserBlocked={currentUser.blockedUserIds.includes(chattingWithProvider.id)}
+                  onUpgradePremium={handleUpgradeToPremium}
                 />
               )}
 
@@ -967,7 +1636,7 @@ export default function App() {
 
             {/* right Dashboard operations Column */}
             <div className="lg:col-span-2">
-              {currentUser.role === 'customer' ? (
+              {portalViewMode === 'client' ? (
                 <DashboardCustomer
                   currentUser={currentUser}
                   onTopUpWallet={handleTopUpBalance}
@@ -984,8 +1653,9 @@ export default function App() {
                   onUpdateCurrentUser={handleUpdateCurrentUser}
                   onUpdateBooking={handleUpdateBooking}
                   triggerNotification={triggerNotification}
+                  onUpgradePremium={handleUpgradeToPremium}
                 />
-              ) : currentUser.role === 'provider' ? (
+              ) : portalViewMode === 'provider' ? (
                 <DashboardProvider
                   currentUser={currentUser}
                   categoriesList={categories}
@@ -1000,6 +1670,7 @@ export default function App() {
                   onUpdateProviderListing={handleUpdateProviderListing}
                   onUpdateBooking={handleUpdateBooking}
                   triggerNotification={triggerNotification}
+                  onProviderSubscribe={handleProviderSubscribe}
                 />
               ) : (
                 <DashboardAdmin
@@ -1014,6 +1685,18 @@ export default function App() {
               )}
             </div>
 
+          </div>
+        )}
+
+        {/* Tab 3: Verification Panel */}
+        {activeTab === 'workspace' && (
+          <div className="animate-fade-in">
+            <WorkspaceHub 
+              currentUser={currentUser}
+              googleToken={googleAccessToken}
+              onTriggerLogin={triggerGoogleSignupPopup}
+              triggerNotification={triggerNotification}
+            />
           </div>
         )}
 
