@@ -373,9 +373,26 @@ End of secured encryption record export. Conforms to GDPR Art. 15.
             <span className="font-mono uppercase text-[10px] tracking-wider">Secured chat is paused. Review active filters.</span>
           </div>
         ) : (
-          <div className="flex items-center gap-2 relative">
-            
-            {/* Attachment Actions */}
+          <div className="flex flex-col gap-3">
+            {!isClient && (
+              <div className="flex flex-wrap gap-2">
+                {['Availability confirmed', 'Requesting more details', 'Booking details sent', 'Let me check my calendar'].map((reply) => (
+                  <button
+                    key={reply}
+                    onClick={() => {
+                      setInputText(reply);
+                      // Give it a tiny delay to allow state to update before focusing/sending if needed, but for now just populating input is fine.
+                    }}
+                    className="px-3 py-1 bg-surface border border-outline-variant hover:border-primary/50 text-[10px] text-neutral-300 hover:text-white rounded-full transition-colors font-mono whitespace-nowrap"
+                  >
+                    {reply}
+                  </button>
+                ))}
+              </div>
+            )}
+            <div className="flex items-center gap-2 relative">
+              
+              {/* Attachment Actions */}
             <button 
               onClick={simulateImageSend}
               className="p-2.5 rounded-lg bg-surface border border-outline-variant text-neutral-400 hover:text-white transition-colors hover:bg-surface-bright hover:scale-105"
@@ -420,6 +437,7 @@ End of secured encryption record export. Conforms to GDPR Art. 15.
               <Send className="w-4 h-4" />
             </button>
 
+          </div>
           </div>
         )}
       </div>

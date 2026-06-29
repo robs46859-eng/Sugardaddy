@@ -130,9 +130,18 @@ export const ProviderCard: React.FC<ProviderCardProps> = ({
         </div>
 
         {/* Professional Title */}
-        <p className="text-[#d6c3b4] font-medium text-xs tracking-wider uppercase mb-3 font-mono">
+        <p className="text-[#d6c3b4] font-medium text-xs tracking-wider uppercase mb-1.5 font-mono">
           {provider.title}
         </p>
+
+        {/* Passed Interview Badges */}
+        {provider.passedQuizzes && provider.passedQuizzes.length > 0 && (
+          <div className="flex flex-wrap gap-1 mb-2">
+            <span className="text-[9px] font-mono font-semibold bg-emerald-950/45 text-emerald-400 border border-emerald-500/20 rounded-md px-1.5 py-0.5 uppercase tracking-wider flex items-center gap-0.5" title="Mandatory interviews completed successfully">
+              <span>✓</span> {provider.passedQuizzes.length} Assessment{provider.passedQuizzes.length > 1 ? 's' : ''} Cleared
+            </span>
+          </div>
+        )}
 
         {/* Biography excerpt */}
         <p className="text-neutral-300 text-sm line-clamp-2 mb-3 leading-relaxed flex-grow">

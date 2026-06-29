@@ -152,7 +152,7 @@ export default function AuthPortal({ onAuthSuccess }: AuthPortalProps) {
                       required
                       value={fullName}
                       onChange={(e) => setFullName(e.target.value)}
-                      placeholder="Marcus Sterling"
+                      placeholder="John Doe"
                       className="w-full bg-zinc-950 border border-zinc-800 rounded-xl py-2.5 pl-10 pr-4 text-sm text-white placeholder-zinc-600 focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500 transition-all font-mono"
                     />
                   </div>

@@ -21,6 +21,7 @@ export const BookingCalendar: React.FC<BookingCalendarProps> = ({
   const [selectedTimeSlot, setSelectedTimeSlot] = useState<string>('07:00 PM');
   const [promoCode, setPromoCode] = useState('');
   const [discount, setDiscount] = useState(0);
+  const [usePoints, setUsePoints] = useState(false);
   const [isBooked, setIsBooked] = useState(false);
   const [createdBooking, setCreatedBooking] = useState<Booking | null>(null);
 
@@ -53,7 +54,22 @@ export const BookingCalendar: React.FC<BookingCalendarProps> = ({
   const bookingSubtotal = provider.pricePerEvent;
   const platformFee = Math.round(bookingSubtotal * 0.10); // 10% commission controls
   const adminBookingFee = 4.95;
-  const totalDue = Math.round((bookingSubtotal + platformFee + adminBookingFee - discount) * 100) / 100;
+  const subtotalBeforePoints = bookingSubtotal + platformFee + adminBookingFee - discount;
+  
+  // Calculate points discount (100 points = $5.00)
+  const availablePoints = currentUser.luxePoints || 0;
+  let pointsDiscountValue = 0;
+  let pointsToRedeem = 0;
+  
+  if (usePoints && availablePoints > 0) {
+    const maxDiscountAllowed = Math.max(0, subtotalBeforePoints);
+    const potentialPointsDiscount = (availablePoints / 100) * 5;
+    pointsDiscountValue = Math.min(maxDiscountAllowed, potentialPointsDiscount);
+    // calculate actual points needed for that discount
+    pointsToRedeem = (pointsDiscountValue / 5) * 100;
+  }
+  
+  const totalDue = Math.max(0, Math.round((subtotalBeforePoints - pointsDiscountValue) * 100) / 100);
 
   const handleApplyPromo = () => {
     if (promoCode.trim().toUpperCase() === 'LUXELIFE') {
@@ -113,6 +129,7 @@ export const BookingCalendar: React.FC<BookingCalendarProps> = ({
       interviewQuestions: selectedQuestions.length > 0 ? selectedQuestions : undefined,
       questionnaireScores: selectedQuestions.length > 0 ? finalScores : undefined,
       overallCompatibilityScore: aggregatePct,
+      pointsUsed: pointsToRedeem > 0 ? pointsToRedeem : undefined,
     };
 
     onConfirmBooking(newBooking);
@@ -343,6 +360,13 @@ export const BookingCalendar: React.FC<BookingCalendarProps> = ({
               </div>
             )}
 
+            {pointsDiscountValue > 0 && (
+              <div className="flex items-center justify-between text-xs text-emerald-400 font-bold font-mono">
+                <span>Luxe Points Redeemed ({pointsToRedeem})</span>
+                <span>-${pointsDiscountValue.toFixed(2)}</span>
+              </div>
+            )}
+
             <div className="pt-2 border-t border-outline-variant flex items-center justify-between">
               <div>
                 <span className="text-xs uppercase font-bold text-neutral-400 font-mono tracking-wide">Total Secured Deposit</span>
@@ -353,20 +377,39 @@ export const BookingCalendar: React.FC<BookingCalendarProps> = ({
           </div>
 
           {/* Promo Code Input */}
-          <div className="flex gap-2">
-            <input 
-              type="text" 
-              placeholder="ENTER PROMO CODE (e.g., LUXELIFE)"
-              value={promoCode}
-              onChange={(e) => setPromoCode(e.target.value)}
-              className="bg-[#100e0c] border border-outline-variant text-xs px-3 py-2 rounded-lg text-white placeholder-neutral-500 flex-grow font-mono uppercase outline-none focus:border-primary"
-            />
-            <button 
-              onClick={handleApplyPromo}
-              className="px-4 py-2 bg-[#2c2a27] hover:bg-[#373432] border border-outline-variant text-neutral-200 text-xs font-bold rounded transition-all font-mono uppercase tracking-wider"
-            >
-              Apply
-            </button>
+          <div className="flex flex-col gap-3">
+            <div className="flex gap-2">
+              <input 
+                type="text" 
+                placeholder="ENTER PROMO CODE (e.g., LUXELIFE)"
+                value={promoCode}
+                onChange={(e) => setPromoCode(e.target.value)}
+                className="bg-[#100e0c] border border-outline-variant text-xs px-3 py-2 rounded-lg text-white placeholder-neutral-500 flex-grow font-mono uppercase outline-none focus:border-primary"
+              />
+              <button 
+                onClick={handleApplyPromo}
+                className="px-4 py-2 bg-[#2c2a27] hover:bg-[#373432] border border-outline-variant text-neutral-200 text-xs font-bold rounded transition-all font-mono uppercase tracking-wider"
+              >
+                Apply
+              </button>
+            </div>
+            {availablePoints > 0 && (
+              <div className="flex items-center gap-2 p-3 bg-primary/5 border border-primary/20 rounded-lg">
+                <input 
+                  type="checkbox" 
+                  id="usePointsCheckbox"
+                  checked={usePoints}
+                  onChange={(e) => setUsePoints(e.target.checked)}
+                  className="w-4 h-4 accent-primary cursor-pointer"
+                />
+                <label htmlFor="usePointsCheckbox" className="text-xs text-neutral-300 font-mono cursor-pointer flex-grow">
+                  Redeem Luxe Points <span className="text-primary font-bold">({availablePoints} available)</span>
+                </label>
+                <span className="text-[10px] text-neutral-400 font-mono italic">
+                  100 PTS = $5
+                </span>
+              </div>
+            )}
           </div>
 
           {/* Payment Warning notice */}

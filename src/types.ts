@@ -14,6 +14,7 @@ export interface VerificationChecklist {
   phone: 'unverified' | 'pending' | 'verified';
   email: 'unverified' | 'pending' | 'verified';
   professionalCredential?: 'unverified' | 'pending' | 'verified';
+  backgroundCheck?: 'unverified' | 'pending' | 'verified';
 }
 
 export interface ServiceProvider {
@@ -44,6 +45,7 @@ export interface ServiceProvider {
   adTimeCreditsMinutes?: number; // free ad credits earned
   privatePhone?: string; // locked/unlocked credential routing
   privateEmail?: string; // locked/unlocked credential routing
+  passedQuizzes?: string[]; // list of completed/passed onboarding quizzes
 }
 
 export interface Booking {
@@ -64,6 +66,7 @@ export interface Booking {
   questionnaireScores?: Record<string, number>; // question index or string -> priority/score weight
   questionnaireAnswers?: Record<string, string>; // question index or string -> reply text
   overallCompatibilityScore?: number;
+  pointsUsed?: number;
 }
 
 export interface Message {
@@ -108,6 +111,7 @@ export interface UserState {
   referralsMadeCount?: number;
   discountsEarnedAmount?: number;
   adCreditsEarnedBalance?: number;
+  luxePoints?: number; // loyalty points earned from completed bookings
   
   // Subscription parameters
   providerSubscriptionActive?: boolean;

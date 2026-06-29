@@ -13,7 +13,7 @@ export const VerificationCenter: React.FC<VerificationCenterProps> = ({
   onUpdateVerification,
   userType,
 }) => {
-  const [activeTab, setActiveTab] = useState<'id' | 'selfie' | 'phone' | 'credential'>('id');
+  const [activeTab, setActiveTab] = useState<'id' | 'selfie' | 'phone' | 'credential' | 'background'>('id');
   const [phoneNumber, setPhoneNumber] = useState('+1 (555) 234-5678');
   const [phoneCode, setPhoneCode] = useState('');
   const [isVerifyingPhone, setIsVerifyingPhone] = useState(false);
@@ -41,7 +41,7 @@ export const VerificationCenter: React.FC<VerificationCenterProps> = ({
   };
 
   // Stats calculation
-  const totalSteps = userType === 'provider' ? 5 : 4;
+  const totalSteps = userType === 'provider' ? 6 : 4;
   const verifiedCount = Object.values(currentVerification).filter(v => v === 'verified').length;
   const trustScore = Math.round((verifiedCount / totalSteps) * 100);
 
@@ -84,7 +84,7 @@ export const VerificationCenter: React.FC<VerificationCenterProps> = ({
       selfie: 'verified',
       phone: 'verified',
       email: 'verified',
-      ...(userType === 'provider' ? { professionalCredential: 'verified' } : {}),
+      ...(userType === 'provider' ? { professionalCredential: 'verified', backgroundCheck: 'verified' } : {}),
     });
   };
 
@@ -122,7 +122,7 @@ export const VerificationCenter: React.FC<VerificationCenterProps> = ({
       </div>
 
       {/* Trust Checklist Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
+      <div className={`grid grid-cols-2 ${userType === 'provider' ? 'md:grid-cols-5' : 'md:grid-cols-4'} gap-3 mb-6`}>
         
         {/* Government ID */}
         <div 
@@ -188,25 +188,47 @@ export const VerificationCenter: React.FC<VerificationCenterProps> = ({
 
         {/* Optional Credentials / Email Verif */}
         {userType === 'provider' ? (
-          <div 
-            onClick={() => setActiveTab('credential')}
-            className={`cursor-pointer p-3.5 rounded border transition-all text-center flex flex-col items-center justify-center relative ${
-              activeTab === 'credential' 
-                ? 'border-primary bg-primary/5 text-white glow-primary-sm' 
-                : 'border-outline-variant bg-[#100e0c]/60 hover:border-[#9e8e80] text-neutral-400'
-            }`}
-          >
-            <div className="p-2 rounded bg-[#100e0c] border border-outline-variant text-primary mb-2">
-              <ShieldCheck className="w-4 h-4" />
+          <>
+            <div 
+              onClick={() => setActiveTab('credential')}
+              className={`cursor-pointer p-3.5 rounded border transition-all text-center flex flex-col items-center justify-center relative ${
+                activeTab === 'credential' 
+                  ? 'border-primary bg-primary/5 text-white glow-primary-sm' 
+                  : 'border-outline-variant bg-[#100e0c]/60 hover:border-[#9e8e80] text-neutral-400'
+              }`}
+            >
+              <div className="p-2 rounded bg-[#100e0c] border border-outline-variant text-primary mb-2">
+                <ShieldCheck className="w-4 h-4" />
+              </div>
+              <p className="text-xs font-bold font-mono uppercase tracking-wider">4. Credentials</p>
+              <span className={`text-[9px] mt-1 px-1.5 py-0.5 rounded font-mono ${
+                currentVerification.professionalCredential === 'verified' ? 'bg-primary/10 text-primary border border-primary/20' :
+                currentVerification.professionalCredential === 'pending' ? 'bg-amber-300/10 text-amber-300 border border-amber-300/20' : 'bg-neutral-800 text-neutral-500'
+              }`}>
+                {(currentVerification.professionalCredential || 'unverified').toUpperCase()}
+              </span>
             </div>
-            <p className="text-xs font-bold font-mono uppercase tracking-wider">4. Credentials</p>
-            <span className={`text-[9px] mt-1 px-1.5 py-0.5 rounded font-mono ${
-              currentVerification.professionalCredential === 'verified' ? 'bg-primary/10 text-primary border border-primary/20' :
-              currentVerification.professionalCredential === 'pending' ? 'bg-amber-300/10 text-amber-300 border border-amber-300/20' : 'bg-neutral-800 text-neutral-500'
-            }`}>
-              {(currentVerification.professionalCredential || 'unverified').toUpperCase()}
-            </span>
-          </div>
+            
+            <div 
+              onClick={() => setActiveTab('background')}
+              className={`cursor-pointer p-3.5 rounded border transition-all text-center flex flex-col items-center justify-center relative ${
+                activeTab === 'background' 
+                  ? 'border-primary bg-primary/5 text-white glow-primary-sm' 
+                  : 'border-outline-variant bg-[#100e0c]/60 hover:border-[#9e8e80] text-neutral-400'
+              }`}
+            >
+              <div className="p-2 rounded bg-[#100e0c] border border-outline-variant text-primary mb-2">
+                <Shield className="w-4 h-4" />
+              </div>
+              <p className="text-xs font-bold font-mono uppercase tracking-wider">5. Background</p>
+              <span className={`text-[9px] mt-1 px-1.5 py-0.5 rounded font-mono ${
+                currentVerification.backgroundCheck === 'verified' ? 'bg-primary/10 text-primary border border-primary/20' :
+                currentVerification.backgroundCheck === 'pending' ? 'bg-amber-300/10 text-amber-300 border border-amber-300/20' : 'bg-neutral-800 text-neutral-500'
+              }`}>
+                {(currentVerification.backgroundCheck || 'unverified').toUpperCase()}
+              </span>
+            </div>
+          </>
         ) : (
           <div 
             className="p-3.5 rounded border border-outline-variant bg-[#100e0c]/25 text-center flex flex-col items-center justify-center text-neutral-500 select-none"
@@ -498,6 +520,68 @@ export const VerificationCenter: React.FC<VerificationCenterProps> = ({
                     Submit Test Info
                   </button>
                 </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {activeTab === 'background' && userType === 'provider' && (
+          <div className="space-y-4 text-left">
+            <h3 className="text-sm font-semibold text-white font-mono uppercase">Comprehensive Background Check</h3>
+            <p className="text-xs text-neutral-400 leading-relaxed max-w-xl">
+              To ensure safety and quality on our platform, all providers must pass a comprehensive background check. A processing fee of $49 is required prior to initiating the review.
+            </p>
+
+            {currentVerification.backgroundCheck === 'verified' ? (
+              <div className="bg-primary/5 rounded p-4 border border-primary/20 flex items-center gap-3">
+                <ShieldCheck className="w-6 h-6 text-primary" />
+                <div>
+                  <p className="text-xs font-bold text-white uppercase font-mono">Background Check Approved</p>
+                  <p className="text-[11px] text-[#9e8e80] font-mono">Status: Cleared. All security conditions met.</p>
+                </div>
+              </div>
+            ) : currentVerification.backgroundCheck === 'pending' ? (
+              <div className="bg-primary/5 rounded p-4 border border-primary/20 flex flex-col gap-4">
+                <div className="flex items-center gap-3">
+                  <div className="w-5 h-5 rounded-full border border-primary border-t-transparent animate-spin shrink-0" />
+                  <div>
+                    <p className="text-xs font-bold text-white font-mono uppercase">BACKGROUND INVESTIGATION PENDING</p>
+                    <p className="text-[11px] text-[#d6c3b4]">Fee paid. Our security partners are processing your background data.</p>
+                  </div>
+                </div>
+                <button 
+                  onClick={() => onUpdateVerification({ backgroundCheck: 'verified' })}
+                  className="w-full sm:w-auto self-start px-3.5 py-1.5 bg-[#ffdebf] hover:bg-[#fdba74] text-[#492900] font-bold text-xs rounded font-mono uppercase tracking-wide"
+                >
+                  Approve Background Check
+                </button>
+              </div>
+            ) : (
+              <div className="border border-outline-variant p-6 rounded bg-[#100e0c]/50">
+                <h4 className="text-white font-bold text-sm mb-4">Background Processing Fee: <span className="text-primary font-mono">$49.00</span></h4>
+                <div className="space-y-3 mb-5">
+                  <input type="text" placeholder="Cardholder Name" className="w-full bg-[#100e0c] border border-outline-variant px-3 py-2 rounded text-xs text-white" />
+                  <div className="flex gap-3">
+                    <input type="text" placeholder="Card Number (0000 0000 0000 0000)" className="w-2/3 bg-[#100e0c] border border-outline-variant px-3 py-2 rounded text-xs text-white" />
+                    <input type="text" placeholder="MM/YY" className="w-1/6 bg-[#100e0c] border border-outline-variant px-3 py-2 rounded text-xs text-white" />
+                    <input type="text" placeholder="CVC" className="w-1/6 bg-[#100e0c] border border-outline-variant px-3 py-2 rounded text-xs text-white" />
+                  </div>
+                </div>
+                
+                <div 
+                  onClick={() => credentialInputRef.current?.click()}
+                  className="border border-dashed border-outline-variant p-5 rounded text-center cursor-pointer hover:border-primary/50 transition-colors mb-5 bg-[#0a0908]"
+                >
+                  <p className="text-xs font-bold text-neutral-350">Upload Authorization Consent Forms (Optional)</p>
+                  <p className="text-[10px] text-neutral-500 mt-1">Accepts PDF, JPG formats 📁</p>
+                </div>
+                
+                <button 
+                  onClick={() => onUpdateVerification({ backgroundCheck: 'pending' })}
+                  className="w-full py-2.5 bg-primary hover:bg-primary/90 text-on-primary font-bold text-xs rounded shadow uppercase font-mono tracking-wider glow-primary-sm"
+                >
+                  Pay $49.00 &amp; Submit For Review
+                </button>
               </div>
             )}
           </div>

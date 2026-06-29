@@ -40,6 +40,8 @@ export const DashboardCustomer: React.FC<DashboardCustomerProps> = ({
   const [reviewRating, setReviewRating] = useState(5);
   const [reviewComment, setReviewComment] = useState('');
   const [isTopUpLoading, setIsTopUpLoading] = useState<number | null>(null);
+  const [customDepositAmount, setCustomDepositAmount] = useState<number>('');
+
 
   const handleStripeCheckout = async (amount: number) => {
     setIsTopUpLoading(amount);
@@ -422,9 +424,19 @@ export const DashboardCustomer: React.FC<DashboardCustomerProps> = ({
           <div className="absolute top-0 right-0 w-24 h-24 bg-[#7c4dff]/5 rounded-full blur-2xl pointer-events-none" />
           
           <div className="space-y-6 text-center">
-            <div>
-              <p className="text-xs uppercase font-bold tracking-widest text-[#849588] font-mono">Secured Escrow Account Portfolio</p>
-              <p className="text-4xl font-bold text-white font-mono tracking-tight mt-1.5">${currentUser.walletBalance}</p>
+            <div className="flex flex-col md:flex-row gap-6">
+              <div className="flex-1 bg-[#131313] p-6 rounded-xl border border-[#2a2a2a] text-center">
+                <p className="text-xs uppercase font-bold tracking-widest text-[#849588] font-mono">Secured Escrow</p>
+                <p className="text-3xl font-bold text-white font-mono tracking-tight mt-1.5">${currentUser.walletBalance}</p>
+              </div>
+              <div className="flex-1 bg-[#131313] p-6 rounded-xl border border-primary/20 text-center relative overflow-hidden">
+                <div className="absolute top-0 right-0 w-16 h-16 bg-primary/10 rounded-full blur-xl pointer-events-none" />
+                <p className="text-xs uppercase font-bold tracking-widest text-primary font-mono flex items-center justify-center gap-1">
+                  <span>✨</span> Luxe Points
+                </p>
+                <p className="text-3xl font-bold text-white font-mono tracking-tight mt-1.5">{currentUser.luxePoints || 0}</p>
+                <p className="text-[9px] text-neutral-400 font-mono uppercase mt-1">100 Points = $5 Value</p>
+              </div>
             </div>
 
             <div className="p-4 rounded-lg bg-[#131313] border border-[#2a2a2a] text-left space-y-3.5">
@@ -461,6 +473,41 @@ export const DashboardCustomer: React.FC<DashboardCustomerProps> = ({
                 >
                   {isTopUpLoading === 1000 ? 'Linking...' : '+$1000 USD'}
                 </button>
+              </div>
+
+              {/* Custom payment amount input form */}
+              <div className="mt-4 pt-4 border-t border-[#2a2a2a] space-y-2">
+                <label className="text-[9px] font-bold text-[#849588] font-mono block uppercase">Or Enter Custom Deposit Amount ($ USD)</label>
+                <div className="flex gap-2">
+                  <div className="relative flex-grow">
+                    <span className="absolute left-3 top-2 text-neutral-400 text-xs font-mono">$</span>
+                    <input 
+                      type="number"
+                      min="10"
+                      max="10000"
+                      value={customDepositAmount}
+                      onChange={(e) => {
+                        const val = e.target.value === '' ? '' : Number(e.target.value);
+                        setCustomDepositAmount(val);
+                      }}
+                      placeholder="e.g. 150"
+                      className="w-full bg-[#131313] border border-outline-variant text-xs pl-7 pr-3 py-1.5 rounded-lg text-white outline-none focus:border-primary font-mono"
+                    />
+                  </div>
+                  <button
+                    onClick={() => {
+                      if (customDepositAmount === '' || customDepositAmount < 10) {
+                        alert('Minimum security deposit is $10.00 USD');
+                        return;
+                      }
+                      handleStripeCheckout(Number(customDepositAmount));
+                    }}
+                    disabled={isTopUpLoading !== null}
+                    className="px-4 py-1.5 bg-gradient-to-r from-primary to-amber-300 hover:from-amber-400 hover:to-primary text-neutral-950 font-mono text-xs font-extrabold uppercase rounded-lg shadow transition-all active:scale-95 cursor-pointer"
+                  >
+                    Deposit Funds
+                  </button>
+                </div>
               </div>
             </div>
           </div>

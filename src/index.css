@@ -60,7 +60,94 @@ body {
   background-position: 0 0, 12px 12px;
 }
 
-/* High Contrast: Solid, deeply opaque styling for all main page boxes */
+/* ================================================== */
+/* PROVIDER THEME OVERRIDES (Emerald & Slate)         */
+/* ================================================== */
+.theme-provider {
+  --color-primary: #34d399; /* emerald-400 */
+  --color-primary-dark: #059669; /* emerald-600 */
+  --color-on-primary: #022c22;
+  --color-primary-container: #10b981; /* emerald-500 */
+  
+  --color-secondary: #e2e8f0;
+  --color-on-secondary: #0f172a;
+  
+  --color-background: #020617; /* slate-950 */
+  --color-on-background: #f8fafc;
+  
+  --color-surface: #0f172a; /* slate-900 */
+  --color-surface-dim: #020617;
+  --color-surface-bright: #1e293b;
+  --color-surface-container-lowest: #000000;
+  --color-surface-container-low: #0f172a;
+  --color-surface-container: #1e293b;
+  --color-surface-container-high: #334155;
+  --color-surface-container-highest: #475569;
+  
+  --color-on-surface: #f8fafc;
+  --color-on-surface-variant: #94a3b8; /* slate-400 */
+  --color-outline: #475569; /* slate-600 */
+  --color-outline-variant: #1e293b; /* slate-800 */
+
+  /* Drop serif for a more clinical/management look on provider side */
+  --font-serif: var(--font-sans);
+}
+
+.theme-provider,
+.theme-provider.freckled-bg {
+  background-color: var(--color-background) !important;
+  color: var(--color-on-background) !important;
+  background-image: 
+    radial-gradient(rgba(52, 211, 153, 0.03) 1px, transparent 0),
+    radial-gradient(rgba(52, 211, 153, 0.02) 1px, transparent 0) !important;
+}
+
+/* Override hardcoded arbitrary tailwind colors inside provider mode */
+.theme-provider [class*="text-[#ffdebf]"] { color: var(--color-primary) !important; }
+.theme-provider [class*="bg-[#ffdebf]"] { background-color: var(--color-primary) !important; }
+.theme-provider [class*="border-[#ffdebf]"] { border-color: var(--color-primary) !important; }
+
+.theme-provider [class*="text-[#d6c3b4]"] { color: var(--color-on-surface-variant) !important; }
+.theme-provider [class*="text-[#9e8e80]"] { color: var(--color-outline) !important; }
+
+.theme-provider [class*="bg-[#151311]"] { background-color: var(--color-background) !important; }
+.theme-provider [class*="bg-[#1c1a18]"],
+.theme-provider [class*="bg-[#1d1b19]"],
+.theme-provider [class*="bg-[#1e1b19]"],
+.theme-provider [class*="bg-[#1c1c1e]"] { background-color: var(--color-surface) !important; }
+
+.theme-provider [class*="bg-[#100e0c]"],
+.theme-provider [class*="bg-[#131313]"],
+.theme-provider [class*="bg-[#131110]"] { background-color: var(--color-surface-container-lowest) !important; }
+
+.theme-provider [class*="border-[#2a2a2a]"],
+.theme-provider [class*="border-[#2c2a27]"],
+.theme-provider [class*="border-[#514439]"] { border-color: var(--color-outline-variant) !important; }
+
+/* General utility color mapping for arbitrary theme shifts */
+.theme-provider [class*="text-amber-"],
+.theme-provider [class*="text-orange-"],
+.theme-provider [class*="text-yellow-"] { color: var(--color-primary) !important; }
+
+.theme-provider [class*="bg-amber-"],
+.theme-provider [class*="bg-orange-"],
+.theme-provider [class*="bg-yellow-"] { background-color: var(--color-primary) !important; }
+
+/* Opacity specific rules for amber overrides */
+.theme-provider [class*="bg-amber-500/5"] { background-color: rgba(52, 211, 153, 0.05) !important; }
+.theme-provider [class*="bg-amber-500/10"] { background-color: rgba(52, 211, 153, 0.10) !important; }
+.theme-provider [class*="bg-amber-500/20"] { background-color: rgba(52, 211, 153, 0.20) !important; }
+.theme-provider [class*="border-amber-500/20"] { border-color: rgba(52, 211, 153, 0.20) !important; }
+.theme-provider [class*="border-amber-500/30"] { border-color: rgba(52, 211, 153, 0.30) !important; }
+
+.theme-provider [class*="border-amber-"],
+.theme-provider [class*="border-orange-"],
+.theme-provider [class*="border-yellow-"] { border-color: var(--color-primary) !important; }
+
+.theme-provider [class*="from-amber-"] { --tw-gradient-from: var(--color-primary) !important; --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to) !important; }
+.theme-provider [class*="to-amber-"] { --tw-gradient-to: var(--color-primary-dark) !important; }
+
+/* High Contrast overrides handling */
 .bg-surface,
 [class*="bg-surface"],
 .bg-surface\/95,

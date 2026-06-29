@@ -24,6 +24,7 @@ import DashboardAdmin from './components/DashboardAdmin';
 import AuthPortal from './components/AuthPortal';
 import WorkspaceHub from './components/WorkspaceHub';
 import OnboardingWizard from './components/OnboardingWizard';
+import MyProfileSettings from './components/MyProfileSettings';
 import { auth, googleAuthProvider } from './lib/firebase';
 import { onAuthStateChanged, signInWithPopup } from 'firebase/auth';
 
@@ -77,26 +78,27 @@ export default function App() {
 
   // Current user initial setup
   const [currentUser, setCurrentUser] = useState<UserState>({
-    id: 'cust_99',
-    name: 'Marcus Sterling',
-    email: 'robs46859@gmail.com',
+    id: '',
+    name: '',
+    email: '',
     role: 'customer',
     walletBalance: 0,
     savedProviderIds: [],
     verification: {
-      governmentId: 'verified',
-      selfie: 'verified',
-      phone: 'verified',
-      email: 'verified',
+      governmentId: 'unverified',
+      selfie: 'unverified',
+      phone: 'unverified',
+      email: 'unverified',
     },
     blockedUserIds: [],
-    hasCompletedClientProfile: true, // Marcus stars completed
+    hasCompletedClientProfile: false,
     hasCompletedProviderProfile: false,
     providerSubscriptionActive: false,
-    isClientPremium: true // starts premium so they can switch viewpoints!
+    isClientPremium: false,
+    luxePoints: 0
   });
 
-  const [activeTab, setActiveTab] = useState<'browse' | 'dashboard' | 'admin' | 'verification' | 'export' | 'workspace'>('browse');
+  const [activeTab, setActiveTab] = useState<'browse' | 'dashboard' | 'admin' | 'verification' | 'export' | 'workspace' | 'profile'>('browse');
 
   const [userCity, setUserCity] = useState<'New York' | 'Los Angeles' | 'Miami' | 'London' | 'Paris' | 'Denver' | 'San Francisco' | 'San Diego' | 'Dallas' | 'Chicago' | 'Philadelphia' | 'Las Vegas' | 'Seattle' | 'Portland' | 'Washington DC' | 'Puerto Rico' | 'Boston' | 'Austin' | 'Phoenix' | 'Atlanta' | 'Nashville' | 'Detroit' | 'Barcelona' | 'Pittsburgh' | 'Cincinnati'>('New York');
   
@@ -262,37 +264,11 @@ export default function App() {
     });
   };
 
-  // Initial Bookings load (one mock booking for visual interest)
-  const [bookings, setBookings] = useState<Booking[]>([
-    {
-      id: 'book_pre_1',
-      providerId: 'prov_1',
-      providerName: 'Alessandra Duval',
-      providerAvatar: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&q=80&w=200',
-      customerId: 'cust_99',
-      customerName: 'Marcus Sterling',
-      date: 'Friday, June 26, 2026',
-      timeSlot: '07:00 PM',
-      status: 'active_escrow',
-      totalAmount: 385,
-      categoryName: 'Lifestyle Coaching',
-      createdAt: '2026-06-18',
-    }
-  ]);
+  // Initial Bookings load
+  const [bookings, setBookings] = useState<Booking[]>([]);
 
   // Messages database list
-  const [messages, setMessages] = useState<Message[]>([
-    {
-      id: 'msg_pre_1',
-      chatId: 'prov_1_cust_99',
-      senderId: 'prov_1',
-      senderName: 'Alessandra Duval',
-      text: 'Good afternoon Marcus, looking forward to facilitating your guests this weekend. All preparation details are safely locked on my end.',
-      timestamp: '01:14 PM',
-      encrypted: true,
-      read: true
-    }
-  ]);
+  const [messages, setMessages] = useState<Message[]>([]);
 
   // Listen for firebase auth state changes
   useEffect(() => {
@@ -482,7 +458,8 @@ export default function App() {
     }
     if (cachedBookings) setBookings(JSON.parse(cachedBookings));
     if (cachedProviders) setProviders(JSON.parse(cachedProviders));
-    if (cachedCategories) setCategories(JSON.parse(cachedCategories));
+    // Re-initialize categories from mockData to enforce preset update.
+    setCategories(INITIAL_CATEGORIES);
 
     const cachedMessages = localStorage.getItem('sugardaddy_messages');
     if (cachedMessages) {
@@ -527,10 +504,48 @@ export default function App() {
   }, []);
 
   const saveToLocalStorage = (user: UserState, bList: Booking[], pList: ServiceProvider[], cList: Category[]) => {
-    localStorage.setItem('sugardaddy_user', JSON.stringify(user));
-    localStorage.setItem('sugardaddy_bookings', JSON.stringify(bList));
-    localStorage.setItem('sugardaddy_providers', JSON.stringify(pList));
-    localStorage.setItem('sugardaddy_categories', JSON.stringify(cList));
+    try {
+      localStorage.setItem('sugardaddy_user', JSON.stringify(user));
+      localStorage.setItem('sugardaddy_bookings', JSON.stringify(bList));
+      localStorage.setItem('sugardaddy_providers', JSON.stringify(pList));
+      localStorage.setItem('sugardaddy_categories', JSON.stringify(cList));
+    } catch (e: any) {
+      if (e.name === 'QuotaExceededError' || e.code === 22) {
+        console.warn("Storage Quota Exceeded. Safely pruning base64 images and video media to save crucial user data.");
+        
+        // Let's prune base64 images/videos to make sure it saves fine
+        const prunedUser = {
+          ...user,
+          images: (user.images || []).map((img) => img.startsWith('data:') ? `https://images.unsplash.com/photo-1540555700478-4be289fbecef?auto=format&fit=crop&q=80&w=600` : img),
+          videos: (user.videos || []).map((vid) => vid.startsWith('data:') ? `https://assets.mixkit.co/videos/preview/mixkit-yacht-floating-in-the-sea-41235-large.mp4` : vid),
+          avatarUrl: user.avatarUrl && user.avatarUrl.startsWith('data:') ? 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=200' : user.avatarUrl
+        };
+
+        const prunedProviders = pList.map(p => {
+          if (p.id === user.id) {
+            return {
+              ...p,
+              avatarUrl: p.avatarUrl && p.avatarUrl.startsWith('data:') ? 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=200' : p.avatarUrl,
+              images: (p.images || []).map((img) => img.startsWith('data:') ? `https://images.unsplash.com/photo-1540555700478-4be289fbecef?auto=format&fit=crop&q=80&w=600` : img),
+              videos: (p.videos || []).map((vid) => vid.startsWith('data:') ? `https://assets.mixkit.co/videos/preview/mixkit-yacht-floating-in-the-sea-41235-large.mp4` : vid),
+            };
+          }
+          return p;
+        });
+
+        try {
+          localStorage.setItem('sugardaddy_user', JSON.stringify(prunedUser));
+          localStorage.setItem('sugardaddy_bookings', JSON.stringify(bList));
+          localStorage.setItem('sugardaddy_providers', JSON.stringify(prunedProviders));
+          localStorage.setItem('sugardaddy_categories', JSON.stringify(cList));
+          console.log("Pruned user data successfully saved to localStorage.");
+        } catch (innerError) {
+          console.error("Critical: Could not save even after pruning.", innerError);
+        }
+      } else {
+        console.error("LocalStorage write error:", e);
+      }
+    }
   };
 
   // Dispatch Notification helper
@@ -595,7 +610,11 @@ export default function App() {
 
   // Customer: Confirm booking submission
   const handleConfirmNewBooking = (newBooking: Booking) => {
-    const updatedUser = { ...currentUser, walletBalance: currentUser.walletBalance - newBooking.totalAmount };
+    const updatedUser = { 
+      ...currentUser, 
+      walletBalance: currentUser.walletBalance - newBooking.totalAmount,
+      luxePoints: Math.max(0, (currentUser.luxePoints || 0) - (newBooking.pointsUsed || 0))
+    };
     const updatedBookings = [newBooking, ...bookings];
     
     // Check if provider exists, increment reviews or listings
@@ -687,15 +706,25 @@ export default function App() {
 
   // Customer: Release funds to provider wallet
   const handleReleaseEscrowFunds = (bookingId: string) => {
+    let earnedPoints = 0;
     const updatedBookings = bookings.map(b => {
       if (b.id === bookingId) {
+        earnedPoints = Math.floor(b.totalAmount);
         return { ...b, status: 'completed' } as Booking;
       }
       return b;
     });
     setBookings(updatedBookings);
-    saveToLocalStorage(currentUser, updatedBookings, providers, categories);
-    triggerNotification('Escrow cleared: Funds released to Service Provider.');
+    
+    // Add points to current user
+    const updatedUser = { 
+      ...currentUser, 
+      luxePoints: (currentUser.luxePoints || 0) + earnedPoints 
+    };
+    setCurrentUser(updatedUser);
+    
+    saveToLocalStorage(updatedUser, updatedBookings, providers, categories);
+    triggerNotification(`Escrow cleared! You earned ${earnedPoints} Luxe Points ✨`);
   };
 
   // Customer: Raise Dispute
@@ -973,7 +1002,7 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen bg-background freckled-bg text-on-background flex flex-col font-sans selection:bg-primary selection:text-on-primary">
+    <div className={`min-h-screen bg-background freckled-bg text-on-background flex flex-col font-sans selection:bg-primary selection:text-on-primary ${portalViewMode === 'provider' ? 'theme-provider' : 'theme-client'}`}>
       
       {/* Cinematic Portal Transition Screen Overlay */}
       {isTransitioning && (
@@ -1024,11 +1053,23 @@ export default function App() {
           
           {/* Logo Brand Header */}
           <div className="flex items-center gap-2 cursor-pointer" onClick={() => setActiveTab('browse')}>
-            <Globe className="w-6 h-6 text-primary shrink-0" />
-            <span className="text-sm font-extrabold tracking-widest uppercase text-white font-serif flex items-center gap-1.5">
-              <span>SUGAR DADDY</span>
-              <span className="text-[10px] bg-primary/10 border border-primary/25 text-primary px-2 py-0.2 rounded font-bold font-mono">P2P MARKETPLACE</span>
-            </span>
+            {portalViewMode === 'client' ? (
+              <>
+                <Globe className="w-6 h-6 text-primary shrink-0" />
+                <span className="text-sm font-extrabold tracking-widest uppercase text-white font-serif flex items-center gap-1.5">
+                  <span>SUGAR DADDY</span>
+                  <span className="text-[10px] bg-primary/10 border border-primary/25 text-primary px-2 py-0.2 rounded font-bold font-mono">P2P MARKETPLACE</span>
+                </span>
+              </>
+            ) : (
+              <>
+                <Shield className="w-6 h-6 text-primary shrink-0" />
+                <span className="text-sm font-extrabold tracking-widest uppercase text-white font-sans flex items-center gap-1.5">
+                  <span>PROVIDER PORTAL</span>
+                  <span className="text-[10px] bg-primary/10 border border-primary/25 text-primary px-2 py-0.2 rounded font-bold font-mono">MANAGEMENT</span>
+                </span>
+              </>
+            )}
           </div>
 
           {/* Center Swapper Roles selector (The gold premium control!) */}
@@ -1043,7 +1084,7 @@ export default function App() {
                 disabled={!currentUser.isClientPremium && currentUser.role !== 'provider'}
                 className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all font-mono uppercase flex items-center gap-1.5 ${
                   (currentUser.isClientPremium || currentUser.role === 'provider')
-                    ? 'bg-amber-500 text-zinc-950 font-extrabold cursor-pointer hover:scale-102 active:scale-98 shadow-lg shadow-amber-500/10'
+                    ? 'bg-primary text-on-primary font-extrabold cursor-pointer hover:scale-[1.02] active:scale-[0.98] shadow-lg shadow-primary/10'
                     : 'bg-zinc-800/20 border border-zinc-850 text-neutral-600 cursor-not-allowed opacity-50'
                 }`}
                 title={(!currentUser.isClientPremium && currentUser.role !== 'provider') ? 'Greyed out: Requires VIP Premium account level to switch sides' : 'Switch over to Provider Portal'}
@@ -1054,7 +1095,7 @@ export default function App() {
             ) : (
               <button 
                 onClick={() => triggerPortalSwitch('client')}
-                className="px-3 py-1.5 bg-neutral-900 border border-zinc-800 text-amber-500 hover:text-white rounded-lg text-xs font-bold transition-all font-mono uppercase flex items-center gap-1.5 cursor-pointer hover:scale-102 active:scale-98 shadow"
+                className="px-3 py-1.5 bg-surface border border-outline-variant text-primary hover:text-white rounded-lg text-xs font-bold transition-all font-mono uppercase flex items-center gap-1.5 cursor-pointer hover:scale-[1.02] active:scale-[0.98] shadow"
                 title="Switch over to Client Portal"
               >
                 <Users className="w-3.5 h-3.5" />
@@ -1136,6 +1177,17 @@ export default function App() {
               </div>
             </div>
 
+            <div 
+              className="flex items-center gap-2 bg-surface border border-primary/20 px-3 py-1.5 rounded-xl animate-fade-in shadow-[0_0_8px_rgba(253,186,116,0.1)]"
+              title="Luxe Points earned from completed bookings"
+            >
+              <span className="text-xs">✨</span>
+              <div>
+                <span className="text-[10px] text-primary block uppercase font-mono tracking-wider font-bold">Points</span>
+                <span className="text-xs font-bold text-white font-mono">{currentUser.luxePoints || 0}</span>
+              </div>
+            </div>
+
             <button
               onClick={handleLogout}
               className="flex items-center gap-2 bg-[#1c1c1e] hover:bg-zinc-800 border border-zinc-805 px-3 py-1.5 rounded-xl cursor-pointer text-xs text-[#d6c3b4] hover:text-white transition-colors"
@@ -1205,6 +1257,15 @@ export default function App() {
               </button>
 
               <button
+                onClick={() => setActiveTab('profile')}
+                className={`px-4 py-2 text-xs uppercase font-extrabold tracking-widest font-mono transition-all shrink-0 ${
+                  activeTab === 'profile' ? 'text-primary border-b-2 border-primary w-fit' : 'text-[#d6c3b4] hover:text-white'
+                }`}
+              >
+                👤 Profile Settings
+              </button>
+
+              <button
                 onClick={() => setActiveTab('verification')}
                 className={`px-4 py-2 text-xs uppercase font-extrabold tracking-widest font-mono transition-all shrink-0 ${
                   activeTab === 'verification' ? 'text-primary border-b-2 border-primary w-fit' : 'text-[#d6c3b4] hover:text-white'
@@ -1240,6 +1301,15 @@ export default function App() {
                 }`}
               >
                 💼 Workspace Sync
+              </button>
+
+              <button
+                onClick={() => setActiveTab('profile')}
+                className={`px-4 py-2 text-xs uppercase font-extrabold tracking-widest font-mono transition-all shrink-0 ${
+                  activeTab === 'profile' ? 'text-primary border-b-2 border-primary w-fit' : 'text-[#d6c3b4] hover:text-white'
+                }`}
+              >
+                👤 Profile Settings
               </button>
 
               <button
@@ -1671,6 +1741,7 @@ export default function App() {
                   onUpdateBooking={handleUpdateBooking}
                   triggerNotification={triggerNotification}
                   onProviderSubscribe={handleProviderSubscribe}
+                  onTopUpWallet={handleTopUpBalance}
                 />
               ) : (
                 <DashboardAdmin
@@ -1723,6 +1794,19 @@ export default function App() {
               userBookings={bookings}
               messagesList={messages}
               reviewsList={providers.flatMap(p => p.reviews)}
+            />
+          </div>
+        )}
+
+        {/* Tab 5: Dynamic Profile Settings Management Tab */}
+        {activeTab === 'profile' && (
+          <div className="max-w-4xl mx-auto">
+            <MyProfileSettings
+              currentUser={currentUser}
+              myListing={currentUser.role === 'provider' ? providers.find(p => p.id === currentUser.id) : undefined}
+              onUpdateCurrentUser={handleUpdateCurrentUser}
+              onUpdateProviderListing={handleUpdateProviderListing}
+              triggerNotification={triggerNotification}
             />
           </div>
         )}

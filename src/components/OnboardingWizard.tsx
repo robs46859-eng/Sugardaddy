@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Category, ServiceProvider, UserState } from '../types';
-import { ShieldCheck, CreditCard, User, Sparkles, Building, CheckCircle, RefreshCcw, Camera } from 'lucide-react';
+import { ShieldCheck, CreditCard, User, Sparkles, Building, CheckCircle, RefreshCcw, Camera, Shield, ArrowRight, ChevronRight, AlertTriangle, BookOpen, Award, Check } from 'lucide-react';
+import { getRequiredQuizzes, QuizSubject, QuizQuestion } from '../quizzes';
 
 interface OnboardingWizardProps {
   currentUser: UserState;
@@ -47,6 +48,14 @@ export const OnboardingWizard: React.FC<OnboardingWizardProps> = ({
   const [selectedAvatar, setSelectedAvatar] = useState(LUXE_AVATARS[0]);
   const [customAvatarUrl, setCustomAvatarUrl] = useState('');
   const [profileError, setProfileError] = useState<string | null>(null);
+
+  // Mandatory Quiz States
+  const [passedQuizIds, setPassedQuizIds] = useState<string[]>([]);
+  const [activeQuiz, setActiveQuiz] = useState<QuizSubject | null>(null);
+  const [activeQuestionIdx, setActiveQuestionIdx] = useState<number>(0);
+  const [selectedAnswers, setSelectedAnswers] = useState<Record<string, string>>({});
+  const [quizFeedback, setQuizFeedback] = useState<string | null>(null);
+  const [quizError, setQuizError] = useState<string | null>(null);
 
   // Handle Client Tier continue
   const handleClientStep1Continue = () => {
@@ -97,6 +106,60 @@ export const OnboardingWizard: React.FC<OnboardingWizardProps> = ({
     }
   };
 
+  // Quiz Handlers
+  const handleAnswerSelect = (questionId: string, option: string) => {
+    setSelectedAnswers(prev => ({ ...prev, [questionId]: option }));
+  };
+
+  const handleNextQuestion = () => {
+    if (!activeQuiz) return;
+    const currentQuestion = activeQuiz.questions[activeQuestionIdx];
+    if (!selectedAnswers[currentQuestion.id]) {
+      setQuizError('Kindly select an answer before proceeding.');
+      return;
+    }
+    setQuizError(null);
+    if (activeQuestionIdx < activeQuiz.questions.length - 1) {
+      setActiveQuestionIdx(prev => prev + 1);
+    }
+  };
+
+  const handlePrevQuestion = () => {
+    if (activeQuestionIdx > 0) {
+      setActiveQuestionIdx(prev => prev - 1);
+    }
+  };
+
+  const handleQuizSubmit = () => {
+    if (!activeQuiz) return;
+    
+    // Validate that all questions are answered
+    const unanswered = activeQuiz.questions.some(q => !selectedAnswers[q.id]);
+    if (unanswered) {
+      setQuizError('Please answer all questions in the assessment.');
+      return;
+    }
+
+    // Check answers
+    const wrongAnswers = activeQuiz.questions.filter(q => selectedAnswers[q.id] !== q.correctAnswer);
+
+    if (wrongAnswers.length === 0) {
+      // Clean pass!
+      setPassedQuizIds(prev => [...prev, activeQuiz.id]);
+      setQuizFeedback('Success! You answered all questions correctly and demonstrated absolute elite knowledge and alignment with our standards.');
+      setQuizError(null);
+      // Wait briefly, then close the active quiz
+      setTimeout(() => {
+        setActiveQuiz(null);
+        setQuizFeedback(null);
+        setSelectedAnswers({});
+        setActiveQuestionIdx(0);
+      }, 2000);
+    } else {
+      setQuizError(`Assessment incomplete. Out of ${activeQuiz.questions.length} questions, some answers were incorrect. Please review safety/etiquette guidelines and try again.`);
+    }
+  };
+
   // Submit Profile & complete onboarding
   const handleProfileSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -113,6 +176,14 @@ export const OnboardingWizard: React.FC<OnboardingWizardProps> = ({
       }
       if (selectedCats.length === 0) {
         setProfileError('Please choose at least 1 specialty category.');
+        return;
+      }
+
+      // Check for required quizzes before onboarding completion
+      const requiredQuizzes = getRequiredQuizzes(selectedCats);
+      const pendingQuizzes = requiredQuizzes.filter(q => !passedQuizIds.includes(q.id));
+      if (pendingQuizzes.length > 0) {
+        setCurrentStep(4);
         return;
       }
 
@@ -155,7 +226,8 @@ export const OnboardingWizard: React.FC<OnboardingWizardProps> = ({
         verifiedBadge: true,
         availabilityCalendar: ['Monday', 'Wednesday', 'Friday', 'Saturday'],
         privatePhone: '+1 (555) 720-0909',
-        privateEmail: `${updatedUser.name.toLowerCase().replace(/\s+/g, '')}@luxeelevate.net`
+        privateEmail: `${updatedUser.name.toLowerCase().replace(/\s+/g, '')}@luxeelevate.net`,
+        passedQuizzes: passedQuizIds
       };
 
       onCompleteOnboarding(updatedUser, newProvider);
@@ -200,14 +272,18 @@ export const OnboardingWizard: React.FC<OnboardingWizardProps> = ({
           <span>Onboarding Progress:</span>
           <div className="flex gap-2">
             <span className={`px-2 py-0.5 rounded ${currentStep >= 1 ? 'bg-amber-500/20 text-amber-400 font-bold border border-amber-500/30' : 'bg-zinc-900'}`}>
-              Stage 1
+              Stage 1: {isProvider ? 'Billing' : 'Select Tier'}
             </span>
-            <span className={`px-2 py-0.5 rounded ${currentStep >= 2 ? 'bg-amber-500/20 text-amber-400 font-bold border border-amber-500/30' : 'bg-zinc-900'}`}>
-              Stage 2
+            <span className={`px-2 py-0.5 rounded ${(currentStep >= 2 && currentStep !== 4) ? 'bg-amber-500/20 text-amber-400 font-bold border border-amber-500/30' : 'bg-zinc-900'}`}>
+              Stage 2: {isProvider ? 'Profile Details' : 'Billing Check'}
             </span>
-            {!isProvider && (
+            {isProvider ? (
+              <span className={`px-2 py-0.5 rounded ${currentStep === 4 ? 'bg-amber-500/20 text-amber-400 font-bold border border-amber-500/30' : 'bg-zinc-900'}`}>
+                Stage 3: Interviews
+              </span>
+            ) : (
               <span className={`px-2 py-0.5 rounded ${currentStep >= 3 ? 'bg-amber-500/20 text-amber-400 font-bold border border-amber-500/30' : 'bg-zinc-900'}`}>
-                Stage 3
+                Stage 3: Details
               </span>
             )}
           </div>
@@ -250,7 +326,7 @@ export const OnboardingWizard: React.FC<OnboardingWizardProps> = ({
                     type="text" 
                     value={cardName}
                     onChange={(e) => setCardName(e.target.value)}
-                    placeholder="e.g. Alessandra Duval"
+                    placeholder="e.g. Alex Morgan"
                     className="w-full bg-zinc-950 border border-zinc-800 p-2.5 rounded text-xs text-white focus:outline-none focus:border-amber-500"
                     required
                   />
@@ -607,7 +683,7 @@ export const OnboardingWizard: React.FC<OnboardingWizardProps> = ({
                     type="text" 
                     value={cardName}
                     onChange={(e) => setCardName(e.target.value)}
-                    placeholder="e.g. Marcus Sterling"
+                    placeholder="e.g. John Doe"
                     className="w-full bg-zinc-950 border border-zinc-800 p-2.5 rounded text-xs text-white focus:outline-none focus:border-amber-500"
                     required
                   />
@@ -699,7 +775,7 @@ export const OnboardingWizard: React.FC<OnboardingWizardProps> = ({
                   type="text" 
                   value={cardName}
                   onChange={(e) => setCardName(e.target.value)}
-                  placeholder="e.g. Marcus Sterling"
+                  placeholder="e.g. John Doe"
                   className="w-full bg-zinc-950 border border-zinc-800 p-2.5 rounded text-xs text-white focus:outline-none focus:border-amber-500"
                   required
                 />
@@ -781,6 +857,225 @@ export const OnboardingWizard: React.FC<OnboardingWizardProps> = ({
                 <span>Initialize Secured Client Account!</span>
               </button>
             </form>
+          </div>
+        )}
+
+        {/* ========================================= */}
+        {/* PROVIDER STAGE 3: MANDATORY INTERVIEWS    */}
+        {/* ========================================= */}
+        {isProvider && currentStep === 4 && (
+          <div className="p-6 space-y-6 max-h-[600px] overflow-y-auto text-left">
+            {!activeQuiz ? (
+              // List of Required Quizzes
+              <div className="space-y-6">
+                <div className="space-y-1.5">
+                  <div className="flex items-center gap-2">
+                    <ShieldCheck className="w-5 h-5 text-amber-500 animate-pulse" />
+                    <h2 className="text-lg font-bold text-white tracking-tight uppercase font-serif">Mandatory Specialty Interviews</h2>
+                  </div>
+                  <p className="text-xs text-neutral-400 leading-relaxed">
+                    Based on your selected track specialties (<span className="text-amber-500 font-mono font-bold">{selectedCats.join(', ')}</span>), you must complete and pass the respective professional knowledge quizzes to authorize your listing.
+                  </p>
+                </div>
+
+                <div className="space-y-3.5">
+                  {getRequiredQuizzes(selectedCats).map((quiz) => {
+                    const isPassed = passedQuizIds.includes(quiz.id);
+                    return (
+                      <div 
+                        key={quiz.id}
+                        className={`p-4 border rounded-xl flex flex-col md:flex-row justify-between items-start md:items-center gap-4 transition-all ${
+                          isPassed 
+                            ? 'bg-emerald-950/20 border-emerald-500/30' 
+                            : 'bg-zinc-950/60 border-zinc-800 hover:border-zinc-750'
+                        }`}
+                      >
+                        <div className="space-y-1 max-w-md">
+                          <div className="flex items-center gap-2">
+                            {isPassed ? (
+                              <span className="p-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400">
+                                <Check className="w-3.5 h-3.5" />
+                              </span>
+                            ) : (
+                              <span className="p-1 rounded-full bg-amber-500/10 border border-amber-500/20 text-amber-400">
+                                <BookOpen className="w-3.5 h-3.5" />
+                              </span>
+                            )}
+                            <h4 className="text-xs font-extrabold uppercase font-mono text-white tracking-wide">
+                              {quiz.title}
+                            </h4>
+                          </div>
+                          <p className="text-[11px] text-neutral-400 leading-relaxed">
+                            {quiz.description}
+                          </p>
+                        </div>
+
+                        <div className="shrink-0 w-full md:w-auto">
+                          {isPassed ? (
+                            <span className="px-3 py-1.5 rounded-lg border border-emerald-500/30 bg-emerald-500/10 text-emerald-400 text-[10px] font-bold uppercase tracking-wider font-mono block text-center">
+                              ✓ PASSED &amp; REGISTERED
+                            </span>
+                          ) : (
+                            <button
+                              onClick={() => {
+                                setActiveQuiz(quiz);
+                                setActiveQuestionIdx(0);
+                                setSelectedAnswers({});
+                                setQuizFeedback(null);
+                                setQuizError(null);
+                              }}
+                              className="w-full px-4 py-2 bg-amber-500 hover:bg-amber-600 text-zinc-950 text-xs font-bold font-mono uppercase tracking-wider rounded-lg flex items-center justify-center gap-1 hover:scale-[1.02] active:scale-[0.98] transition-transform"
+                            >
+                              <span>Enter Assessment</span>
+                              <ChevronRight className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* Submit Panel */}
+                <div className="pt-6 border-t border-zinc-850 flex flex-col sm:flex-row gap-3 items-center justify-between">
+                  <button
+                    onClick={() => setCurrentStep(2)}
+                    className="w-full sm:w-auto px-4 py-2 bg-zinc-900 border border-zinc-800 hover:border-zinc-700 text-neutral-400 text-xs font-bold font-mono uppercase tracking-wider rounded-lg"
+                  >
+                    ← Edit Specialties
+                  </button>
+
+                  {passedQuizIds.length >= getRequiredQuizzes(selectedCats).length ? (
+                    <button
+                      onClick={handleProfileSubmit}
+                      className="w-full sm:w-auto px-6 py-3 bg-gradient-to-r from-amber-500 to-amber-400 hover:from-amber-600 hover:to-amber-500 text-zinc-950 font-extrabold text-xs uppercase tracking-wider font-mono rounded-xl shadow-lg shadow-amber-500/10 flex items-center justify-center gap-1.5 animate-bounce"
+                    >
+                      <CheckCircle className="w-4 h-4" />
+                      <span>Complete Verification &amp; Publish Listing!</span>
+                    </button>
+                  ) : (
+                    <div className="flex items-center gap-2 text-[11px] font-mono text-amber-500/70 p-2 bg-amber-500/5 rounded-lg border border-amber-500/10">
+                      <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0" />
+                      <span>Finish all remaining assessments to activate your professional showcase.</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            ) : (
+              // Active Quiz Screen
+              <div className="space-y-6">
+                {/* Header info */}
+                <div className="p-4 border border-zinc-800 bg-zinc-950/40 rounded-xl space-y-1">
+                  <span className="text-[10px] text-amber-500 font-bold font-mono uppercase tracking-widest block">Active Verification Interview</span>
+                  <h3 className="text-sm font-extrabold uppercase font-mono text-white">{activeQuiz.title}</h3>
+                  <div className="flex justify-between items-center text-[10px] font-mono text-neutral-400 pt-1.5">
+                    <span>Question {activeQuestionIdx + 1} of {activeQuiz.questions.length}</span>
+                    <div className="w-24 h-1.5 bg-zinc-800 rounded-full overflow-hidden">
+                      <div 
+                        className="h-full bg-amber-500 transition-all duration-300"
+                        style={{ width: `${((activeQuestionIdx + 1) / activeQuiz.questions.length) * 100}%` }}
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Error & Feedback messages */}
+                {quizError && (
+                  <div className="p-3 bg-rose-500/10 border border-rose-500/20 text-rose-400 text-xs rounded-xl flex items-start gap-2">
+                    <AlertTriangle className="w-4 h-4 text-rose-500 shrink-0 mt-0.5" />
+                    <span>{quizError}</span>
+                  </div>
+                )}
+                {quizFeedback && (
+                  <div className="p-4 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs rounded-xl flex items-start gap-3">
+                    <CheckCircle className="w-5 h-5 text-emerald-500 shrink-0 mt-0.5 animate-bounce" />
+                    <div className="space-y-1">
+                      <p className="font-bold uppercase font-mono text-[11px]">ASSESSMENT SUCCESSFUL</p>
+                      <p>{quizFeedback}</p>
+                    </div>
+                  </div>
+                )}
+
+                {/* Main Question Display */}
+                {!quizFeedback && (
+                  <div className="space-y-4">
+                    <p className="text-sm font-bold text-white tracking-wide">
+                      {activeQuiz.questions[activeQuestionIdx].question}
+                    </p>
+
+                    <div className="space-y-2.5">
+                      {activeQuiz.questions[activeQuestionIdx].options.map((option, oIdx) => {
+                        const qId = activeQuiz.questions[activeQuestionIdx].id;
+                        const isSelected = selectedAnswers[qId] === option;
+                        return (
+                          <div
+                            key={oIdx}
+                            onClick={() => handleAnswerSelect(qId, option)}
+                            className={`p-3.5 rounded-xl border text-xs cursor-pointer transition-all flex items-center justify-between ${
+                              isSelected 
+                                ? 'bg-amber-500/10 border-amber-500 text-white shadow-[0_0_10px_rgba(253,186,116,0.05)] font-medium' 
+                                : 'bg-[#100e0c]/50 border-zinc-850 hover:border-zinc-700 text-neutral-300'
+                            }`}
+                          >
+                            <span>{option}</span>
+                            <div className={`w-4 h-4 rounded-full border flex items-center justify-center shrink-0 ml-3 ${
+                              isSelected ? 'border-amber-500 bg-amber-500' : 'border-neutral-600'
+                            }`}>
+                              {isSelected && <Check className="w-2.5 h-2.5 text-zinc-950 stroke-[3]" />}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {/* Footer Navigation */}
+                {!quizFeedback && (
+                  <div className="pt-4 border-t border-zinc-850 flex items-center justify-between">
+                    <button
+                      onClick={() => {
+                        setActiveQuiz(null);
+                        setQuizFeedback(null);
+                        setSelectedAnswers({});
+                        setActiveQuestionIdx(0);
+                        setQuizError(null);
+                      }}
+                      className="px-4 py-2 bg-zinc-900 border border-zinc-800 hover:border-zinc-700 text-neutral-400 text-xs font-bold font-mono uppercase tracking-wider rounded-lg"
+                    >
+                      ← Cancel
+                    </button>
+
+                    <div className="flex gap-2">
+                      {activeQuestionIdx > 0 && (
+                        <button
+                          onClick={handlePrevQuestion}
+                          className="px-3.5 py-2 bg-zinc-900 border border-zinc-850 hover:border-zinc-700 text-white text-xs font-bold font-mono uppercase rounded-lg"
+                        >
+                          Prev
+                        </button>
+                      )}
+
+                      {activeQuestionIdx < activeQuiz.questions.length - 1 ? (
+                        <button
+                          onClick={handleNextQuestion}
+                          className="px-4 py-2 bg-zinc-800 hover:bg-zinc-750 text-white text-xs font-bold font-mono uppercase rounded-lg"
+                        >
+                          Next Question
+                        </button>
+                      ) : (
+                        <button
+                          onClick={handleQuizSubmit}
+                          className="px-5 py-2 bg-amber-500 hover:bg-amber-600 text-zinc-950 text-xs font-bold font-mono uppercase rounded-lg shadow-lg shadow-amber-500/10"
+                        >
+                          Submit Assessment
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         )}
 

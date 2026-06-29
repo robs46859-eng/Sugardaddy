@@ -20,7 +20,11 @@ export const MyProfileSettings: React.FC<MyProfileSettingsProps> = ({
   // Local form states
   const [name, setName] = useState(currentUser.name);
   const [email, setEmail] = useState(currentUser.email);
-  const [localAvatar, setLocalAvatar] = useState(currentUser.avatarUrl || currentUser.role === 'provider' && myListing ? myListing.avatarUrl : 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=200');
+  const [localAvatar, setLocalAvatar] = useState(
+    currentUser.role === 'provider' && myListing?.avatarUrl 
+      ? myListing.avatarUrl 
+      : (currentUser.avatarUrl || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=200')
+  );
 
   // Multi-media states
   const [profileImages, setProfileImages] = useState<string[]>(
@@ -443,7 +447,7 @@ export const MyProfileSettings: React.FC<MyProfileSettingsProps> = ({
                   required
                   value={name}
                   onChange={(e) => setName(e.target.value)}
-                  placeholder="e.g. Marcus Sterling"
+                  placeholder="e.g. John Doe"
                   className="w-full bg-[#100e0c] border border-outline-variant text-xs px-3 py-2 rounded-lg text-white outline-none focus:border-primary font-mono"
                 />
               </div>
