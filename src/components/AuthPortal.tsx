@@ -2,7 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { 
   createUserWithEmailAndPassword, 
   signInWithEmailAndPassword, 
-  signInWithPopup 
+  signInWithPopup,
+  GoogleAuthProvider
 } from 'firebase/auth';
 import { auth, googleAuthProvider } from '../lib/firebase.ts';
 import { Mail, Lock, User, Sparkles, Check, X, ShieldAlert, Eye, EyeOff } from 'lucide-react';
@@ -90,22 +91,27 @@ export default function AuthPortal({ onAuthSuccess }: AuthPortalProps) {
     setError(null);
     setLoading(true);
     try {
-      // workspace scopes
-      googleAuthProvider.addScope('https://www.googleapis.com/auth/drive.file');
-      googleAuthProvider.addScope('https://www.googleapis.com/auth/calendar.events');
-      googleAuthProvider.addScope('https://www.googleapis.com/auth/forms.body');
-      googleAuthProvider.addScope('https://www.googleapis.com/auth/contacts');
-
       const result = await signInWithPopup(auth, googleAuthProvider);
-      const credential = (result as any)._credentials || {};
-      const token = (result as any).accessToken || credential.accessToken;
+      
+      // Extract the OAuth access token using the official Firebase API
+      const credential = GoogleAuthProvider.credentialFromResult(result);
+      const token = credential?.accessToken || undefined;
       
       const firebaseUser = result.user;
       
       onAuthSuccess(firebaseUser, firebaseUser.displayName || '', 'customer', token);
     } catch (err: any) {
-      console.error(err);
-      setError(err?.message || 'Google sign-in abort or error occurred.');
+      console.error('Google sign-in error:', err);
+      // Provide user-friendly messages for common errors
+      if (err.code === 'auth/popup-closed-by-user') {
+        setError('Sign-in popup was closed. Please try again.');
+      } else if (err.code === 'auth/popup-blocked') {
+        setError('Sign-in popup was blocked by your browser. Please allow popups for this site.');
+      } else if (err.code === 'auth/cancelled-popup-request') {
+        // Silent — user just clicked again before first popup resolved
+      } else {
+        setError(err?.message || 'Google sign-in error occurred.');
+      }
     } finally {
       setLoading(false);
     }

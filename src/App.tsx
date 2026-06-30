@@ -26,7 +26,7 @@ import WorkspaceHub from './components/WorkspaceHub';
 import OnboardingWizard from './components/OnboardingWizard';
 import MyProfileSettings from './components/MyProfileSettings';
 import { auth, googleAuthProvider } from './lib/firebase';
-import { onAuthStateChanged, signInWithPopup } from 'firebase/auth';
+import { onAuthStateChanged, signInWithPopup, GoogleAuthProvider } from 'firebase/auth';
 
 import { 
   Star, 
@@ -303,7 +303,8 @@ export default function App() {
           hasCompletedClientProfile: false,
           hasCompletedProviderProfile: false,
           providerSubscriptionActive: false,
-          isClientPremium: false
+          isClientPremium: false,
+          luxePoints: 0
         };
         setCurrentUser(fallbackUser);
         localStorage.setItem('sugardaddy_user', JSON.stringify(fallbackUser));
@@ -424,14 +425,11 @@ export default function App() {
 
   const triggerGoogleSignupPopup = async () => {
     try {
-      googleAuthProvider.addScope('https://www.googleapis.com/auth/drive.file');
-      googleAuthProvider.addScope('https://www.googleapis.com/auth/calendar.events');
-      googleAuthProvider.addScope('https://www.googleapis.com/auth/forms.body');
-      googleAuthProvider.addScope('https://www.googleapis.com/auth/contacts');
-
       const result = await signInWithPopup(auth, googleAuthProvider);
-      const credential = (result as any)._credentials || {};
-      const token = (result as any).accessToken || credential.accessToken;
+      
+      // Extract the OAuth access token using the official Firebase API
+      const credential = GoogleAuthProvider.credentialFromResult(result);
+      const token = credential?.accessToken;
       if (token) {
         setGoogleAccessToken(token);
         triggerNotification('Connected Google Workspace session successfully!');
