@@ -37,7 +37,7 @@ jobs:
         with:
           workload_identity_provider: 'projects/899325565183/locations/global/workloadIdentityPools/github-pool/providers/github-provider'
           service_account: 'github-actions-deploy@vertex1-490112.iam.gserviceaccount.com'
-          create_credentials_file: true
+          token_format: 'access_token'
 
       - name: Install Firebase CLI
         run: npm install -g firebase-tools
@@ -45,6 +45,4 @@ jobs:
       - name: Deploy preview to Firebase Hosting
         run: |
           CHANNEL_ID="pr-${{ github.event.pull_request.number }}"
-          firebase hosting:channel:deploy "$CHANNEL_ID" --project vertex1-490112 --json
-        env:
-          GOOGLE_APPLICATION_CREDENTIALS: ${{ steps.auth.outputs.credentials_file_path }}
+          firebase hosting:channel:deploy "$CHANNEL_ID" --project vertex1-490112 --token "${{ steps.auth.outputs.access_token }}" --json
