@@ -18,6 +18,7 @@ import VerificationCenter from './components/VerificationCenter';
 import ChatSection from './components/ChatSection';
 import BookingCalendar from './components/BookingCalendar';
 import ExportCenter from './components/ExportCenter';
+import { ParallaxCategoryCard } from './components/ParallaxCategoryCard';
 import DashboardCustomer from './components/DashboardCustomer';
 import DashboardProvider from './components/DashboardProvider';
 import DashboardAdmin from './components/DashboardAdmin';
@@ -37,17 +38,22 @@ import {
   Calendar, 
   Lock, 
   ShieldCheck, 
-  X, 
-  AlertCircle, 
-  Check, 
-  LayoutDashboard, 
+  Mail, 
+  AlertTriangle, 
+  HelpCircle, 
+  Settings, 
+  FileText, 
+  Smartphone, 
+  Camera, 
+  LogOut, 
+  Download, 
+  SlidersHorizontal,
   Plus, 
   Users, 
   Menu, 
   Power, 
   Compass, 
   Sparkles, 
-  SlidersHorizontal, 
   Search, 
   Award, 
   Shield, 
@@ -1363,40 +1369,27 @@ export default function App() {
                 )}
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                {categories.map((cat) => {
-                  const isSelected = selectedCategory === cat.name;
+              <div className="space-y-8">
+                {Array.from(new Set(categories.map(c => c.group || 'Other Specialties'))).map((groupName) => {
+                  const groupCats = categories.filter(c => (c.group || 'Other Specialties') === groupName);
+                  if (groupCats.length === 0) return null;
                   return (
-                    <div
-                      key={cat.id}
-                      onClick={() => setSelectedCategory(isSelected ? 'All Luxe' : cat.name)}
-                      className={`cursor-pointer p-4 rounded-xl border text-left transition-all duration-200 relative overflow-hidden select-none flex flex-col justify-between h-[120px] ${
-                        isSelected 
-                          ? 'border-primary bg-primary/5 text-white shadow-[0_0_15px_rgba(253,186,116,0.12)]' 
-                          : 'border-outline-variant bg-surface hover:border-[#9e8e80] text-neutral-300'
-                      }`}
-                    >
-                      <div className="flex items-center justify-between">
-                        <span className="text-[9px] font-mono font-bold uppercase text-[#9e7e60]">
-                          {cat.isCustom ? 'Custom Sector' : 'Verified Career'}
-                        </span>
-                        {isSelected && (
-                          <span className="w-2 h-2 rounded bg-primary animate-pulse" />
-                        )}
-                      </div>
-
-                      <div className="my-1.5 min-h-[44px]">
-                        <h4 className="text-xs font-bold text-white uppercase tracking-wide font-mono line-clamp-1">
-                          {cat.name}
-                        </h4>
-                        <p className="text-[10px] text-neutral-400 leading-snug line-clamp-2 mt-0.5">
-                          {cat.description}
-                        </p>
-                      </div>
-
-                      <div className="pt-1.5 border-t border-outline-variant/60 flex items-center justify-between text-[9px] font-mono uppercase tracking-wider text-primary font-semibold">
-                        <span>{isSelected ? 'Active Filter' : 'Filter Providers'}</span>
-                        <ChevronRight className="w-3 h-3 text-neutral-500" />
+                    <div key={groupName} className="space-y-3">
+                      <h4 className="text-[10px] font-mono text-[#d6c3b4] uppercase tracking-wider font-bold border-b border-outline-variant/40 pb-1">
+                        {groupName}
+                      </h4>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                        {groupCats.map((cat) => {
+                          const isSelected = selectedCategory === cat.name;
+                          return (
+                            <ParallaxCategoryCard 
+                              key={cat.id}
+                              cat={cat}
+                              isSelected={isSelected}
+                              onClick={() => setSelectedCategory(isSelected ? 'All Luxe' : cat.name)}
+                            />
+                          );
+                        })}
                       </div>
                     </div>
                   );

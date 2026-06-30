@@ -6,6 +6,7 @@ export interface Category {
   iconName: string;
   description: string;
   isCustom?: boolean;
+  group?: string;
 }
 
 export interface VerificationChecklist {
