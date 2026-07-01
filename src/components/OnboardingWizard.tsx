@@ -216,15 +216,14 @@ export const OnboardingWizard: React.FC<OnboardingWizardProps> = ({
         isFeatured: false,
         avatarUrl: customAvatarUrl || selectedAvatar,
         verification: {
-          governmentId: 'verified',
-          selfie: 'verified',
-          phone: 'verified',
-          email: 'verified',
-          professionalCredential: 'pending'
+          governmentId: 'unverified',
+          selfie: 'unverified',
+          phone: 'unverified',
+          email: 'unverified',
         },
         reviews: [],
-        verifiedBadge: true,
-        availabilityCalendar: ['Monday', 'Wednesday', 'Friday', 'Saturday'],
+        verifiedBadge: false,
+        availabilityCalendar: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'],
         privatePhone: '+1 (555) 720-0909',
         privateEmail: `${updatedUser.name.toLowerCase().replace(/\s+/g, '')}@luxeelevate.net`,
         passedQuizzes: passedQuizIds

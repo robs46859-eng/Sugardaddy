@@ -23,7 +23,6 @@ import DashboardCustomer from './components/DashboardCustomer';
 import DashboardProvider from './components/DashboardProvider';
 import DashboardAdmin from './components/DashboardAdmin';
 import AuthPortal from './components/AuthPortal';
-import WorkspaceHub from './components/WorkspaceHub';
 import OnboardingWizard from './components/OnboardingWizard';
 import MyProfileSettings from './components/MyProfileSettings';
 import { auth, googleAuthProvider } from './lib/firebase';
@@ -289,7 +288,9 @@ export default function App() {
               setCurrentUser(parsed);
               return;
             }
-          } catch (e) {}
+          } catch (e) {
+            console.error('Failed to parse sugardaddy_user from localStorage', e);
+          }
         }
         
         const fallbackUser: UserState = {
@@ -300,10 +301,10 @@ export default function App() {
           walletBalance: 0,
           savedProviderIds: [],
           verification: {
-            governmentId: 'verified',
-            selfie: 'verified',
-            phone: 'verified',
-            email: 'verified',
+            governmentId: 'unverified',
+            selfie: 'unverified',
+            phone: 'unverified',
+            email: 'unverified',
           },
           blockedUserIds: [],
           hasCompletedClientProfile: false,
@@ -334,10 +335,10 @@ export default function App() {
       walletBalance: 0,
       savedProviderIds: [],
       verification: {
-        governmentId: 'verified',
-        selfie: 'verified',
-        phone: 'verified',
-        email: 'verified',
+        governmentId: 'unverified',
+        selfie: 'unverified',
+        phone: 'unverified',
+        email: 'unverified',
       },
       blockedUserIds: [],
       hasCompletedClientProfile: false,
@@ -448,41 +449,42 @@ export default function App() {
 
   // Sync state with localstorage & auto-detect closest city
   useEffect(() => {
+    const loadData = async () => {
+      try {
+        const [provRes, bookRes, msgRes, revRes] = await Promise.all([
+          fetch('/api/providers'), fetch('/api/bookings'), fetch('/api/messages'), fetch('/api/admin/revenue')
+        ]);
+        const [pData, bData, mData, rData] = await Promise.all([
+          provRes.json(), bookRes.json(), msgRes.json(), revRes.json()
+        ]);
+        if (Array.isArray(pData) && pData.length > 0) setProviders(pData);
+        if (Array.isArray(bData) && bData.length > 0) setBookings(bData);
+        if (Array.isArray(mData) && mData.length > 0) {
+          const thirtyDaysAgo = Date.now() - 30 * 24 * 60 * 60 * 1000;
+          const freshMsgs = mData.filter((m: any) => {
+            const createdTime = m.createdAt ? new Date(m.createdAt).getTime() : Date.now();
+            return createdTime >= thirtyDaysAgo;
+          });
+          setMessages(freshMsgs);
+        }
+        if (Array.isArray(rData) && rData.length > 0) setAdminRevenue(rData);
+      } catch (err) {
+        console.error('Error fetching data from API:', err);
+      }
+    };
+    loadData();
+
     const cachedUsers = localStorage.getItem('sugardaddy_user');
-    const cachedBookings = localStorage.getItem('sugardaddy_bookings');
-    const cachedProviders = localStorage.getItem('sugardaddy_providers');
-    const cachedCategories = localStorage.getItem('sugardaddy_categories');
     const cachedCity = localStorage.getItem('sugardaddy_city');
-    const cachedRevenue = localStorage.getItem('sugardaddy_admin_revenue');
     
     if (cachedUsers) {
       try {
         setCurrentUser(JSON.parse(cachedUsers));
-      } catch (err) {}
+      } catch (err) {
+        console.error('Failed to parse sugardaddy_user during loadData', err);
+      }
     }
-    if (cachedBookings) setBookings(JSON.parse(cachedBookings));
-    if (cachedProviders) setProviders(JSON.parse(cachedProviders));
-    // Re-initialize categories from mockData to enforce preset update.
     setCategories(INITIAL_CATEGORIES);
-
-    const cachedMessages = localStorage.getItem('sugardaddy_messages');
-    if (cachedMessages) {
-      try {
-        const parsedMsgs: Message[] = JSON.parse(cachedMessages);
-        const thirtyDaysAgo = Date.now() - 30 * 24 * 60 * 60 * 1000;
-        const freshMsgs = parsedMsgs.filter(m => {
-          const createdTime = m.createdAt ? new Date(m.createdAt).getTime() : Date.now();
-          return createdTime >= thirtyDaysAgo;
-        });
-        setMessages(freshMsgs);
-      } catch (err) {}
-    }
-    
-    if (cachedRevenue) {
-      try {
-        setAdminRevenue(JSON.parse(cachedRevenue));
-      } catch (err) {}
-    }
     
     if (cachedCity) {
       setUserCity(cachedCity as any);
@@ -508,47 +510,8 @@ export default function App() {
   }, []);
 
   const saveToLocalStorage = (user: UserState, bList: Booking[], pList: ServiceProvider[], cList: Category[]) => {
-    try {
+    if (user.id) {
       localStorage.setItem('sugardaddy_user', JSON.stringify(user));
-      localStorage.setItem('sugardaddy_bookings', JSON.stringify(bList));
-      localStorage.setItem('sugardaddy_providers', JSON.stringify(pList));
-      localStorage.setItem('sugardaddy_categories', JSON.stringify(cList));
-    } catch (e: any) {
-      if (e.name === 'QuotaExceededError' || e.code === 22) {
-        console.warn("Storage Quota Exceeded. Safely pruning base64 images and video media to save crucial user data.");
-        
-        // Let's prune base64 images/videos to make sure it saves fine
-        const prunedUser = {
-          ...user,
-          images: (user.images || []).map((img) => img.startsWith('data:') ? `https://images.unsplash.com/photo-1540555700478-4be289fbecef?auto=format&fit=crop&q=80&w=600` : img),
-          videos: (user.videos || []).map((vid) => vid.startsWith('data:') ? `https://assets.mixkit.co/videos/preview/mixkit-yacht-floating-in-the-sea-41235-large.mp4` : vid),
-          avatarUrl: user.avatarUrl && user.avatarUrl.startsWith('data:') ? 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=200' : user.avatarUrl
-        };
-
-        const prunedProviders = pList.map(p => {
-          if (p.id === user.id) {
-            return {
-              ...p,
-              avatarUrl: p.avatarUrl && p.avatarUrl.startsWith('data:') ? 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=200' : p.avatarUrl,
-              images: (p.images || []).map((img) => img.startsWith('data:') ? `https://images.unsplash.com/photo-1540555700478-4be289fbecef?auto=format&fit=crop&q=80&w=600` : img),
-              videos: (p.videos || []).map((vid) => vid.startsWith('data:') ? `https://assets.mixkit.co/videos/preview/mixkit-yacht-floating-in-the-sea-41235-large.mp4` : vid),
-            };
-          }
-          return p;
-        });
-
-        try {
-          localStorage.setItem('sugardaddy_user', JSON.stringify(prunedUser));
-          localStorage.setItem('sugardaddy_bookings', JSON.stringify(bList));
-          localStorage.setItem('sugardaddy_providers', JSON.stringify(prunedProviders));
-          localStorage.setItem('sugardaddy_categories', JSON.stringify(cList));
-          console.log("Pruned user data successfully saved to localStorage.");
-        } catch (innerError) {
-          console.error("Critical: Could not save even after pruning.", innerError);
-        }
-      } else {
-        console.error("LocalStorage write error:", e);
-      }
     }
   };
 
@@ -824,12 +787,12 @@ export default function App() {
         isFeatured: false,
         avatarUrl: editedData.avatarUrl || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=200',
         verification: {
-          governmentId: 'verified',
-          selfie: 'verified',
-          phone: 'verified',
-          email: 'verified',
+          governmentId: 'unverified',
+          selfie: 'unverified',
+          phone: 'unverified',
+          email: 'unverified',
         },
-        verifiedBadge: true,
+        verifiedBadge: false,
         availabilityCalendar: editedData.availabilityCalendar || ['Friday', 'Saturday'],
         reviews: []
       };
@@ -1615,9 +1578,9 @@ export default function App() {
                             distanceMiles: 0,
                             locationName: 'Encrypted Routing',
                             isFeatured: false,
-                            verification: { governmentId: 'verified', selfie: 'verified', phone: 'verified', email: 'verified' },
+                            verification: { governmentId: 'unverified', selfie: 'unverified', phone: 'unverified', email: 'unverified' },
                             reviews: [],
-                            verifiedBadge: true,
+                            verifiedBadge: false,
                             availabilityCalendar: []
                           } as any;
                         });
@@ -1747,18 +1710,6 @@ export default function App() {
               )}
             </div>
 
-          </div>
-        )}
-
-        {/* Tab 3: Verification Panel */}
-        {activeTab === 'workspace' && (
-          <div className="animate-fade-in">
-            <WorkspaceHub 
-              currentUser={currentUser}
-              googleToken={googleAccessToken}
-              onTriggerLogin={triggerGoogleSignupPopup}
-              triggerNotification={triggerNotification}
-            />
           </div>
         )}
 

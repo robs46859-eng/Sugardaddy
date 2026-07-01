@@ -42,3 +42,18 @@ jobs:
 
       - name: Deploy to Firebase Hosting
         run: firebase deploy --only hosting --project vertex1-490112 --token "${{ steps.auth.outputs.access_token }}"
+
+      - name: Deploy to Cloud Run
+        uses: google-github-actions/deploy-cloudrun@v2
+        with:
+          service: 'sugardaddy-api'
+          region: 'us-central1'
+          source: '.'
+          env_vars: |
+            NODE_ENV=production
+            SQL_HOST=${{ secrets.SQL_HOST }}
+            SQL_USER=${{ secrets.SQL_USER }}
+            SQL_PASSWORD=${{ secrets.SQL_PASSWORD }}
+            SQL_DB_NAME=${{ secrets.SQL_DB_NAME }}
+            STRIPE_SECRET_KEY=${{ secrets.STRIPE_SECRET_KEY }}
+            STRIPE_WEBHOOK_SECRET=${{ secrets.STRIPE_WEBHOOK_SECRET }}

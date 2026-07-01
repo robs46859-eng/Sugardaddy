@@ -57,13 +57,31 @@ export const VerificationCenter: React.FC<VerificationCenterProps> = ({
   };
 
   // Mock Camera verification simulator
-  const simulateSelfieCapture = () => {
+  const startStripeVerification = async () => {
     setIsCapturing(true);
-    setTimeout(() => {
-      setCapturedSelfie('https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&q=80&w=200');
+    try {
+      const storedUser = localStorage.getItem('sugardaddy_user');
+      const uid = storedUser ? JSON.parse(storedUser).id : 'local_dev_user';
+
+      const res = await fetch('/api/stripe/create-verification-session', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          uid,
+          returnUrl: window.location.href,
+        })
+      });
+      const data = await res.json();
+      if (data.url) {
+        window.location.href = data.url;
+      } else {
+        throw new Error(data.error || 'Failed to create verification session');
+      }
+    } catch (err: any) {
+      console.error(err);
+      alert('Verification Error: ' + err.message);
       setIsCapturing(false);
-      onUpdateVerification({ selfie: 'pending' });
-    }, 2000);
+    }
   };
 
   // Verify phone code helper
@@ -280,48 +298,17 @@ export const VerificationCenter: React.FC<VerificationCenterProps> = ({
                 </button>
               </div>
             ) : (
-              <div 
-                onDragOver={(e) => { e.preventDefault(); setIsDragOver(true); }}
-                onDragLeave={() => setIsDragOver(false)}
-                onDrop={handleIdDrop}
-                onClick={() => idInputRef.current?.click()}
-                className={`border-2 border-dashed rounded p-6 text-center transition-colors cursor-pointer ${
-                  isDragOver ? 'border-primary bg-primary/5' : 'border-outline-variant hover:border-[#849588]'
-                }`}
-              >
-                <input 
-                  type="file"
-                  ref={idInputRef}
-                  onChange={handleIdFileChange}
-                  accept="image/*,application/pdf"
-                  className="hidden"
-                />
-                <Upload className="w-8 h-8 text-neutral-500 mx-auto mb-2" />
-                <p className="text-xs font-bold text-neutral-350">Drag &amp; Drop Passport / ID Card</p>
-                <p className="text-[11px] text-neutral-500 mt-1">Supports PDF, PNG, JPG formats. Click to browse local files 📁</p>
-                <div className="flex gap-2 justify-center mt-3">
-                  <button 
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      idInputRef.current?.click();
-                    }}
-                    className="px-3 py-1.5 bg-primary/20 hover:bg-primary/30 text-primary hover:text-white text-[11px] font-mono font-bold rounded border border-primary/30 active:scale-95 uppercase tracking-wider"
-                  >
-                    Browse Local File 📁
-                  </button>
-                  <button 
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setUploadedIdName('Simulated_Passport_ID.jpg');
-                      onUpdateVerification({ governmentId: 'pending' });
-                    }}
-                    className="px-3 py-1.5 bg-[#2c2a27] hover:bg-[#373432] text-neutral-200 text-[11px] font-bold rounded font-mono border border-outline-variant active:scale-95 uppercase tracking-wider"
-                  >
-                    Simulate ID
-                  </button>
-                </div>
+              <div className="flex flex-col items-center justify-center p-6 border border-dashed border-outline-variant rounded bg-black/30">
+                <ShieldCheck className="w-8 h-8 text-neutral-500 mb-2" />
+                <p className="text-xs font-bold text-neutral-350">Secure Identity Verification Required</p>
+                <p className="text-[11px] text-neutral-500 mt-1 mb-4 max-w-sm">You will be redirected to Stripe Identity to securely upload your government ID and take a live selfie.</p>
+                <button 
+                  onClick={startStripeVerification}
+                  disabled={isCapturing}
+                  className="px-4 py-2 bg-[#ffdebf] hover:bg-[#fdba74] text-[#492900] font-extrabold text-xs rounded shadow active:scale-95 transition-all font-mono uppercase tracking-wider glow-primary-sm disabled:opacity-50"
+                >
+                  {isCapturing ? 'Starting Session...' : 'Verify with Stripe Identity'}
+                </button>
               </div>
             )}
           </div>
@@ -365,23 +352,17 @@ export const VerificationCenter: React.FC<VerificationCenterProps> = ({
             ) : (
               <div className="flex flex-col items-center justify-center p-6 border border-dashed border-outline-variant rounded bg-black/30">
                 <Camera className="w-8 h-8 text-neutral-500 mb-2" />
-                {isCapturing ? (
-                  <div className="text-center py-2">
-                    <div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-2" />
-                    <p className="text-xs font-mono text-primary animate-pulse uppercase">Accessing simulated webcam feed... hold steady...</p>
-                  </div>
-                ) : (
-                  <div className="text-center">
-                    <p className="text-xs font-bold text-neutral-350">Device Web Camera Activation required</p>
-                    <p className="text-[11px] text-neutral-500 mt-1">Keep stable lighting and follow center screen alignment directions</p>
-                    <button 
-                      onClick={simulateSelfieCapture}
-                      className="mt-3 px-4 py-1.5 bg-[#ffdebf] hover:bg-[#fdba74] text-[#492900] font-extrabold text-xs rounded shadow active:scale-95 transition-all font-mono uppercase tracking-wider glow-primary-sm"
-                    >
-                      Activate Camera Liveness Test
-                    </button>
-                  </div>
-                )}
+                <div className="text-center">
+                  <p className="text-xs font-bold text-neutral-350">Stripe Identity Validation required</p>
+                  <p className="text-[11px] text-neutral-500 mt-1">Stripe will capture your selfie and match it against your Government ID.</p>
+                  <button 
+                    onClick={startStripeVerification}
+                    disabled={isCapturing}
+                    className="mt-3 px-4 py-1.5 bg-[#ffdebf] hover:bg-[#fdba74] text-[#492900] font-extrabold text-xs rounded shadow active:scale-95 transition-all font-mono uppercase tracking-wider glow-primary-sm disabled:opacity-50"
+                  >
+                    {isCapturing ? 'Starting Session...' : 'Start Stripe Verification'}
+                  </button>
+                </div>
               </div>
             )}
           </div>

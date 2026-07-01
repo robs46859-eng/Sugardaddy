@@ -17,15 +17,8 @@ For the platform to function correctly, you must provide your own environment va
 
 Create a `.env` file in the root directory (you can copy `.env.example`) and add the following keys:
 
-**Frontend Firebase Config**
-```
-VITE_FIREBASE_API_KEY=your_firebase_api_key
-VITE_FIREBASE_AUTH_DOMAIN=your_firebase_auth_domain
-VITE_FIREBASE_PROJECT_ID=your_firebase_project_id
-VITE_FIREBASE_STORAGE_BUCKET=your_firebase_storage_bucket
-VITE_FIREBASE_MESSAGING_SENDER_ID=your_firebase_messaging_sender_id
-VITE_FIREBASE_APP_ID=your_firebase_app_id
-```
+**Firebase Config**
+Firebase configuration is public and hardcoded in `firebase-applet-config.json`. Do not use `VITE_FIREBASE_*` variables.
 
 **Backend Configuration**
 ```
@@ -59,9 +52,13 @@ NODE_ENV=development
    ```
 
 ## Deployment
-You can deploy this application via standard static hosting providers (such as Vercel, Netlify, or Firebase Hosting). Before deploying, ensure that your environment variables are configured correctly in your hosting provider's dashboard.
+This application is deployed on Google Cloud using a split architecture:
+- **Frontend**: Hosted on Firebase Hosting (configured in `firebase.json`).
+- **Backend**: Hosted on Cloud Run (deployed via Dockerfile).
 
-- Push your repository to GitHub.
-- Link your GitHub repository to your hosting provider.
-- Configure the environment variables in the provider settings.
-- Build and deploy the site using the `npm run build` command.
+### Secrets Management
+Secrets such as `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, and `SQL_*` variables should NOT be committed to the repository. 
+In production, use **Cloud Run Environment Variables** to securely pass these credentials to the backend.
+
+### CI/CD
+Deployment is automated via GitHub Actions (`.github/workflows/firebase-hosting-deploy.yml`). Pushing to the `main` branch will automatically build and deploy both the frontend (Firebase) and backend (Cloud Run).

@@ -2,7 +2,7 @@ import express from 'express';
 import path from 'path';
 import { createServer as createViteServer } from 'vite';
 import { getDb } from './src/db/index';
-import { users, googleFormsLogs, googleCalendarEvents, googleContactsLogs, googleChatNotifications } from './src/db/schema';
+import { users, googleFormsLogs, googleCalendarEvents, googleContactsLogs, googleChatNotifications, stripeEvents } from './src/db/schema';
 import { eq, desc } from 'drizzle-orm';
 import Stripe from 'stripe';
 
@@ -23,13 +23,35 @@ async function startServer() {
   const app = express();
   const PORT = 3000;
 
+  const logError = (context: string, err: any, metadata: any = {}) => {
+    console.error(JSON.stringify({
+      severity: 'ERROR',
+      message: err?.message || String(err),
+      context,
+      ...metadata,
+      stack: err?.stack
+    }));
+  };
+
   app.use(express.json());
 
   // --- API ROUTES FIRST ---
 
   // Health check
-  app.get('/api/health', (req, res) => {
-    res.json({ status: 'ok', service: 'Hub Full-Stack Server', databaseUrlAvailable: !!process.env.DATABASE_URL });
+  app.get('/api/health', async (req, res) => {
+    let dbStatus = 'disconnected';
+    try {
+      const db = getDb();
+      if (db) {
+        // Query to check connectivity
+        await db.execute('SELECT 1');
+        dbStatus = 'connected';
+      }
+    } catch (e) {
+      logError('Health check DB connection failed', e);
+      dbStatus = 'error';
+    }
+    res.json({ status: 'ok', service: 'Hub Full-Stack Server', databaseStatus: dbStatus });
   });
 
   // User synchronization with Firebase and Cloud SQL
@@ -71,7 +93,7 @@ async function startServer() {
         return res.json({ success: true, action: 'inserted' });
       }
     } catch (err: any) {
-      console.error('Error syncing user:', err);
+      logError('Auth sync failed', err);
       res.status(500).json({ error: err.message || 'Error occurred during database auth sync' });
     }
   });
@@ -129,7 +151,7 @@ async function startServer() {
                 name: 'Luxe Hub Escrow Wallet Deposit',
                 description: `Secure funds deposit for client ID: ${uid}`,
               },
-              unit_amount: Math.round(amount * 105), // amount in cents with simple nominal simulation
+              unit_amount: Math.round(amount * 100), // amount in cents
             },
             quantity: 1,
           },
@@ -151,6 +173,32 @@ async function startServer() {
     }
   });
 
+  // 1.5 Create Stripe Identity Verification Session
+  app.post('/api/stripe/create-verification-session', async (req, res) => {
+    try {
+      const { uid, returnUrl } = req.body;
+      if (!uid) {
+        return res.status(400).json({ error: 'Missing uid for verification.' });
+      }
+
+      if (!process.env.STRIPE_SECRET_KEY) {
+        return res.status(501).json({ error: 'Stripe API has not been configured.' });
+      }
+
+      const stripe = getStripeInstance();
+      const session = await stripe.identity.verificationSessions.create({
+        type: 'document',
+        metadata: { uid },
+        return_url: returnUrl || 'http://localhost:3000/verification-success',
+      });
+
+      res.json({ success: true, client_secret: session.client_secret, url: session.url });
+    } catch (err: any) {
+      console.error('Stripe verification session error:', err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   // 2. Stripe Webhook Endpoint with secure signature checks (Stripe-Signature header validation)
   app.post('/api/stripe/webhook', express.raw({ type: 'application/json' }), async (req, res) => {
     const signature = req.headers['stripe-signature'];
@@ -164,15 +212,13 @@ async function startServer() {
 
     try {
       const stripe = getStripeInstance();
-      if (webhookSecret && signature) {
-        // Authenticate webhook request signatures securely
-        event = stripe.webhooks.constructEvent(req.body, signature, webhookSecret);
-      } else {
-        // fallback simulated webhook logic for sandbox/local/testing environment
-        console.warn('⚠️ STRIPE_WEBHOOK_SECRET is missing. Bypassing secure signature verification.');
-        const rawBodyStr = req.body.toString('utf8');
-        event = JSON.parse(rawBodyStr) as Stripe.Event;
+      if (!webhookSecret || !signature) {
+        console.error('⚠️ STRIPE_WEBHOOK_SECRET or signature is missing. Failing closed.');
+        return res.status(400).send('Webhook Error: Missing secret or signature');
       }
+      
+      // Authenticate webhook request signatures securely
+      event = stripe.webhooks.constructEvent(req.body, signature, webhookSecret);
 
       console.log(`[Stripe Webhook] Received webhook event: ${event.type}`);
 
@@ -188,25 +234,61 @@ async function startServer() {
           const db = getDb();
 
           if (db) {
+            // Idempotency check
+            const processedEvent = await db.select().from(stripeEvents).where(eq(stripeEvents.id, event.id)).limit(1);
+            if (processedEvent.length > 0) {
+              console.log(`[Stripe Webhook] Event ${event.id} already processed. Skipping.`);
+              return res.status(200).json({ received: true, alreadyProcessed: true });
+            }
+
             console.log(`[Stripe Webhook] Wallet upgrade triggered for user ${uid}. Depositing $${topUpAmount}`);
             const existingUser = await db.select().from(users).where(eq(users.uid, uid)).limit(1);
             if (existingUser.length > 0) {
               const currentBalance = existingUser[0].walletBalance || 0;
               const newBalance = currentBalance + topUpAmount;
-              await db.update(users)
-                .set({ walletBalance: newBalance })
-                .where(eq(users.uid, uid));
+              
+              await db.transaction(async (tx) => {
+                await tx.update(users)
+                  .set({ walletBalance: newBalance })
+                  .where(eq(users.uid, uid));
+                await tx.insert(stripeEvents).values({ id: event.id, type: event.type });
+              });
+              
               console.log(`[Stripe Webhook] Successfully credited $${topUpAmount} to database user ${uid}. New balance: $${newBalance}`);
             }
           } else {
             console.warn(`[Stripe Webhook] Database offline. Session verified but not written: ${uid}, $${topUpAmount}`);
           }
         }
+      } else if (event.type === 'identity.verification_session.verified') {
+        const session = event.data.object as Stripe.Identity.VerificationSession;
+        const uid = session.metadata?.uid;
+
+        if (uid) {
+          const db = getDb();
+          if (db) {
+            console.log(`[Stripe Webhook] Verification approved for user ${uid}.`);
+            // Idempotency check
+            const processedEvent = await db.select().from(stripeEvents).where(eq(stripeEvents.id, event.id)).limit(1);
+            if (processedEvent.length === 0) {
+              await db.transaction(async (tx) => {
+                await tx.update(users)
+                  .set({ 
+                    verificationGovId: 'verified',
+                    verificationSelfie: 'verified' 
+                  })
+                  .where(eq(users.uid, uid));
+                await tx.insert(stripeEvents).values({ id: event.id, type: event.type });
+              });
+              console.log(`[Stripe Webhook] Verification status updated in DB for user ${uid}.`);
+            }
+          }
+        }
       }
 
       res.status(200).json({ received: true });
     } catch (err: any) {
-      console.error(`❌ Stripe webhooks verification failed: ${err.message}`);
+      logError('Stripe webhook failed', err);
       res.status(400).send(`Webhook Error: ${err.message}`);
     }
   });
@@ -272,7 +354,7 @@ async function startServer() {
 
       res.json({ success: true, type, logId });
     } catch (err: any) {
-      console.error('Error logging workspace action:', err);
+      logError('Workspace log action failed', err);
       res.status(500).json({ error: err.message });
     }
   });
@@ -293,7 +375,83 @@ async function startServer() {
 
       res.json({ forms, calendar, contacts, chat, offline: false });
     } catch (err: any) {
-      console.error('Error retrieving workspace logs:', err);
+      logError('Workspace get logs failed', err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Phase 5 API Endpoints
+  app.get('/api/providers', async (req, res) => {
+    try {
+      const db = getDb();
+      if (!db) return res.json([]);
+      const data = await db.select().from(providers);
+      const result = data.map(p => ({
+        id: p.id,
+        name: p.name,
+        title: p.title,
+        bio: p.bio,
+        pricePerEvent: p.pricePerEvent,
+        locationName: p.locationName,
+        avatarUrl: p.avatarUrl,
+        ...(p.extraData as object || {})
+      }));
+      res.json(result);
+    } catch (err: any) {
+      logError('API fetch failed', err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.get('/api/bookings', async (req, res) => {
+    try {
+      const db = getDb();
+      if (!db) return res.json([]);
+      const data = await db.select().from(bookings);
+      const result = data.map(b => ({
+        id: b.id,
+        providerId: b.providerId,
+        customerId: b.customerId,
+        date: b.date,
+        timeSlot: b.timeSlot,
+        status: b.status,
+        totalAmount: b.totalAmount,
+        ...(b.extraData as object || {})
+      }));
+      res.json(result);
+    } catch (err: any) {
+      logError('API fetch failed', err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.get('/api/messages', async (req, res) => {
+    try {
+      const db = getDb();
+      if (!db) return res.json([]);
+      const data = await db.select().from(messages);
+      const result = data.map(m => ({
+        id: m.id,
+        chatId: m.chatId,
+        senderId: m.senderId,
+        text: m.text,
+        ...(m.extraData as object || {})
+      }));
+      res.json(result);
+    } catch (err: any) {
+      logError('API fetch failed', err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.get('/api/admin/revenue', async (req, res) => {
+    try {
+      const db = getDb();
+      if (!db) return res.json([]);
+      const data = await db.select().from(adminRevenue);
+      res.json(data);
+    } catch (err: any) {
+      logError('API fetch failed', err);
       res.status(500).json({ error: err.message });
     }
   });

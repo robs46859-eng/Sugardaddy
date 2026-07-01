@@ -1,5 +1,5 @@
 import { relations } from 'drizzle-orm';
-import { integer, pgTable, serial, text, timestamp } from 'drizzle-orm/pg-core';
+import { integer, pgTable, serial, text, timestamp, jsonb } from 'drizzle-orm/pg-core';
 
 // PostgreSQL Users table synced with Firebase Auth and wallet balances
 export const users = pgTable('users', {
@@ -9,6 +9,10 @@ export const users = pgTable('users', {
   name: text('name'),
   role: text('role').default('customer'), // 'customer' | 'provider' | 'admin'
   walletBalance: integer('wallet_balance').default(0),
+  verificationGovId: text('verification_gov_id').default('unverified'),
+  verificationSelfie: text('verification_selfie').default('unverified'),
+  verificationPhone: text('verification_phone').default('unverified'),
+  verificationEmail: text('verification_email').default('unverified'),
   createdAt: timestamp('created_at').defaultNow(),
 });
 
@@ -60,3 +64,50 @@ export const usersRelations = relations(users, ({ many }) => ({
   contacts: many(googleContactsLogs),
   chats: many(googleChatNotifications),
 }));
+
+// Processed Stripe events for idempotency
+export const stripeEvents = pgTable('stripe_events', {
+  id: text('id').primaryKey(), // Stripe event ID
+  type: text('type').notNull(),
+  processedAt: timestamp('processed_at').defaultNow(),
+});
+
+export const providers = pgTable('providers', {
+  id: text('id').primaryKey(), // references users.uid
+  name: text('name').notNull(),
+  title: text('title').notNull(),
+  bio: text('bio').notNull(),
+  pricePerEvent: integer('price_per_event').notNull(),
+  locationName: text('location_name').notNull(),
+  avatarUrl: text('avatar_url'),
+  extraData: jsonb('extra_data'), // JSONB for categories, reviews, stats
+  createdAt: timestamp('created_at').defaultNow(),
+});
+
+export const bookings = pgTable('bookings', {
+  id: text('id').primaryKey(), // uuid
+  providerId: text('provider_id').notNull(),
+  customerId: text('customer_id').notNull(),
+  date: text('date').notNull(),
+  timeSlot: text('time_slot').notNull(),
+  status: text('status').notNull(),
+  totalAmount: integer('total_amount').notNull(),
+  extraData: jsonb('extra_data'), // JSONB for names, avatars, questions
+  createdAt: timestamp('created_at').defaultNow(),
+});
+
+export const messages = pgTable('messages', {
+  id: text('id').primaryKey(), // uuid
+  chatId: text('chat_id').notNull(),
+  senderId: text('sender_id').notNull(),
+  text: text('text').notNull(),
+  extraData: jsonb('extra_data'), // JSONB for senderName, isVoice
+  createdAt: timestamp('created_at').defaultNow(),
+});
+
+export const adminRevenue = pgTable('admin_revenue', {
+  id: serial('id').primaryKey(),
+  type: text('type').notNull(),
+  amount: integer('amount').notNull(),
+  createdAt: timestamp('created_at').defaultNow(),
+});
