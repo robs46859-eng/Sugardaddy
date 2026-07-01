@@ -43,17 +43,9 @@ jobs:
       - name: Deploy to Firebase Hosting
         run: firebase deploy --only hosting --project vertex1-490112 --token "${{ steps.auth.outputs.access_token }}"
 
-      - name: Deploy to Cloud Run
-        uses: google-github-actions/deploy-cloudrun@v2
-        with:
-          service: 'sugardaddy-api'
-          region: 'us-central1'
-          source: '.'
-          env_vars: |
-            NODE_ENV=production
-            SQL_HOST=${{ secrets.SQL_HOST }}
-            SQL_USER=${{ secrets.SQL_USER }}
-            SQL_PASSWORD=${{ secrets.SQL_PASSWORD }}
-            SQL_DB_NAME=${{ secrets.SQL_DB_NAME }}
-            STRIPE_SECRET_KEY=${{ secrets.STRIPE_SECRET_KEY }}
-            STRIPE_WEBHOOK_SECRET=${{ secrets.STRIPE_WEBHOOK_SECRET }}
+      # Note: a "Deploy to Cloud Run" step previously lived here, deploying the
+      # Express backend to a `sugardaddy-api` Cloud Run service. It's removed
+      # because the live app (frontend + /api backend) is served entirely from
+      # Hostinger, so this Firebase Hosting workflow only needs to publish the
+      # static build. Re-add a Cloud Run (or similar) deploy step here if the
+      # backend is ever moved off Hostinger.
