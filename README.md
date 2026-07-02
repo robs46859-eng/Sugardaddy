@@ -6,21 +6,21 @@ A peer-to-peer premium service marketplace focused on privacy, secure escrows, a
 This platform connects elite clients with top-tier service providers. It supports secure dual-portals (Client and Provider), Firebase authentication, booking management, and encrypted messaging.
 
 ## Architecture
-- **Frontend**: A React SPA built with Vite, hosted on Firebase Hosting.
-- **Backend**: An Express API (`server.ts`), intended to run on Google Cloud Run.
-- **Database**: A PostgreSQL database (e.g., Cloud SQL), accessed via Drizzle ORM.
+- **Hosting**: The entire application (frontend + `/api` backend) is served from **Hostinger**. The Express server (`server.ts`) serves the built SPA from `dist/` and handles all `/api` routes.
+- **Frontend**: A React SPA built with Vite. Production build outputs to `dist/` (client only).
+- **Backend**: An Express API (`server.ts`). Production bundle outputs to `dist-server/server.cjs` — kept **outside** the publicly served `dist/` directory on purpose. Never copy `dist-server/` into a public web root.
+- **Database**: A PostgreSQL database, accessed via Drizzle ORM. If DB env vars are unset in production, the app runs in offline/degraded mode rather than falling back to localhost defaults.
+- **Firebase**: Used for **Auth only**. Firebase Hosting is decommissioned — the old `vertex1-490112.web.app` address serves a static "site moved" page (`firebase-public/`).
 
 ## Setup Instructions
 
 ### Environment Variables
-For the platform to function correctly, you must provide your own environment variables.
+Create a `.env` file in the root directory (copy `.env.example`) with:
 
-Create a `.env` file in the root directory (you can copy `.env.example`) and add the following keys:
+**Firebase client config**
+The public Firebase web config (API key, project ID, etc.) is hardcoded in `src/lib/firebase.ts`. This is safe to commit *only* while Firebase Auth authorized domains and any Firestore/DB security rules are locked down. `VITE_FIREBASE_*` env vars override the hardcoded values if set at build time.
 
-**Firebase Config**
-Firebase configuration is public and hardcoded in `firebase-applet-config.json`. Do not use `VITE_FIREBASE_*` variables.
-
-**Backend Configuration**
+**Backend configuration (required in production)**
 ```
 SQL_HOST=127.0.0.1
 SQL_USER=postgres
@@ -33,6 +33,7 @@ STRIPE_SECRET_KEY=your_stripe_secret
 STRIPE_WEBHOOK_SECRET=your_stripe_webhook_secret
 
 NODE_ENV=development
+PORT=3000
 ```
 
 ### Installation
@@ -48,17 +49,15 @@ NODE_ENV=development
 
 3. Build for production:
    ```bash
-   npm run build
+   npm run build   # client → dist/, server → dist-server/server.cjs
+   npm start       # runs dist-server/server.cjs, serves dist/ + /api
    ```
 
 ## Deployment
-This application is deployed on Google Cloud using a split architecture:
-- **Frontend**: Hosted on Firebase Hosting (configured in `firebase.json`).
-- **Backend**: Hosted on Cloud Run (deployed via Dockerfile).
+The app is deployed to Hostinger: upload/sync the repo (or `dist/` + `dist-server/` + `node_modules`), set the env vars above, and run `npm start` (or use the Dockerfile). **Only `dist/` may be exposed as a web root** — `dist-server/` contains the server bundle and sourcemap.
 
 ### Secrets Management
-Secrets such as `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, and `SQL_*` variables should NOT be committed to the repository. 
-In production, use **Cloud Run Environment Variables** to securely pass these credentials to the backend.
+Secrets (`STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `SQL_*`) must NOT be committed. Set them as environment variables on the host.
 
 ### CI/CD
-Deployment is automated via GitHub Actions (`.github/workflows/firebase-hosting-deploy.yml`). Pushing to the `main` branch will automatically build and deploy both the frontend (Firebase) and backend (Cloud Run).
+`.github/workflows/firebase-hosting-deploy.yml` only publishes the static "site moved" placeholder to the old Firebase Hosting address when `firebase-public/` or `firebase.json` change. There is no automated deploy to Hostinger; deploys there are manual.

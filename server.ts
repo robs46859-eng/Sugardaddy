@@ -1,8 +1,7 @@
 import express from 'express';
 import path from 'path';
-import { createServer as createViteServer } from 'vite';
 import { getDb } from './src/db/index';
-import { users, googleFormsLogs, googleCalendarEvents, googleContactsLogs, googleChatNotifications, stripeEvents } from './src/db/schema';
+import { users, googleFormsLogs, googleCalendarEvents, googleContactsLogs, googleChatNotifications, stripeEvents, providers, bookings, messages, adminRevenue } from './src/db/schema';
 import { eq, desc } from 'drizzle-orm';
 import Stripe from 'stripe';
 
@@ -21,7 +20,7 @@ function getStripeInstance(): Stripe {
 
 async function startServer() {
   const app = express();
-  const PORT = 3000;
+  const PORT = Number(process.env.PORT) || 3000;
 
   const logError = (context: string, err: any, metadata: any = {}) => {
     console.error(JSON.stringify({
@@ -131,6 +130,9 @@ async function startServer() {
       if (!uid || !amount) {
         return res.status(400).json({ error: 'Missing uid or amount for payment.' });
       }
+      if (!successUrl || !cancelUrl) {
+        return res.status(400).json({ error: 'Missing successUrl or cancelUrl for payment redirect.' });
+      }
 
       // Safe lazy check of secret key presence
       if (!process.env.STRIPE_SECRET_KEY) {
@@ -162,8 +164,8 @@ async function startServer() {
           amount: amount.toString(),
           type: 'wallet_top_up'
         },
-        success_url: successUrl || 'http://localhost:3000/?payment=success',
-        cancel_url: cancelUrl || 'http://localhost:3000/?payment=cancelled',
+        success_url: successUrl,
+        cancel_url: cancelUrl,
       });
 
       res.json({ success: true, sessionId: session.id, url: session.url });
@@ -180,6 +182,9 @@ async function startServer() {
       if (!uid) {
         return res.status(400).json({ error: 'Missing uid for verification.' });
       }
+      if (!returnUrl) {
+        return res.status(400).json({ error: 'Missing returnUrl for verification redirect.' });
+      }
 
       if (!process.env.STRIPE_SECRET_KEY) {
         return res.status(501).json({ error: 'Stripe API has not been configured.' });
@@ -189,7 +194,7 @@ async function startServer() {
       const session = await stripe.identity.verificationSessions.create({
         type: 'document',
         metadata: { uid },
-        return_url: returnUrl || 'http://localhost:3000/verification-success',
+        return_url: returnUrl,
       });
 
       res.json({ success: true, client_secret: session.client_secret, url: session.url });
@@ -458,6 +463,8 @@ async function startServer() {
 
   // Vite middleware for assets compile and serving
   if (process.env.NODE_ENV !== 'production') {
+    // Dynamic import keeps vite out of the production bundle/runtime deps.
+    const { createServer: createViteServer } = await import('vite');
     const vite = await createViteServer({
       server: { middlewareMode: true },
       appType: 'spa',
