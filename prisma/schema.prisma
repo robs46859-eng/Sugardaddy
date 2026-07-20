@@ -1,0 +1,64 @@
+datasource db {
+  provider = "sqlite"
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model User {
+  id               String               @id @default(uuid())
+  email            String               @unique
+  name             String?
+  createdAt        DateTime             @default(now())
+  updatedAt        DateTime             @updatedAt
+  medications      MedicationReminder[]
+  appointments     Appointment[]
+  stripePackages   StripePackage[]
+  conversations    Conversation[]
+}
+
+model MedicationReminder {
+  id          String   @id @default(uuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id])
+  name        String   // e.g., "Lisinopril"
+  dosage      String   // e.g., "10mg"
+  timeOfDay   String   // e.g., "08:00"
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+}
+
+model Appointment {
+  id          String   @id @default(uuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id])
+  title       String   // e.g., "Therapy Session"
+  description String?
+  date        DateTime
+  location    String?
+  provider    String?  // The vendor or service provider
+  createdAt   DateTime @default(now())
+}
+
+model StripePackage {
+  id            String   @id @default(uuid())
+  userId        String
+  user          User     @relation(fields: [userId], references: [id])
+  serviceName   String   // e.g., "In-home Massage"
+  vendorCost    Float
+  markupCost    Float
+  totalCost     Float
+  paymentLink   String?  // The dynamically generated Stripe link
+  status        String   @default("pending") // pending, paid, fulfilled
+  createdAt     DateTime @default(now())
+}
+
+model Conversation {
+  id          String   @id @default(uuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id])
+  role        String   // "user", "model", or "subagent"
+  content     String
+  timestamp   DateTime @default(now())
+}
